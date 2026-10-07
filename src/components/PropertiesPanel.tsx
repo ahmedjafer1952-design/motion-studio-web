@@ -1,0 +1,286 @@
+import type { AnimatablePropKey, Easing, ImageLayerProps, Point, ShapeLayerProps, TextLayerProps } from "../types";
+import { useEditorStore } from "../state/store";
+import { evaluateTransform } from "../engine/evaluate";
+import { PROPERTY_COLORS } from "./Timeline/constants";
+
+const EASINGS: Easing[] = ["linear", "easeIn", "easeOut", "easeInOut"];
+
+function AnimRow({
+  layerId,
+  propKey,
+  label,
+  children,
+}: {
+  layerId: string;
+  propKey: AnimatablePropKey;
+  label: string;
+  children: React.ReactNode;
+}) {
+  const layer = useEditorStore((s) => s.project.composition.layers.find((l) => l.id === layerId));
+  const addKeyframe = useEditorStore((s) => s.addKeyframe);
+  const removeKeyframe = useEditorStore((s) => s.removeKeyframe);
+  const updateKeyframe = useEditorStore((s) => s.updateKeyframe);
+  const setPlayhead = useEditorStore((s) => s.setPlayhead);
+  if (!layer) return null;
+  const anim = layer.transform[propKey];
+  const animated = anim.keyframes.length > 0;
+
+  return (
+    <div className="anim-row">
+      <div className="anim-row-header">
+        <button
+          className={`stopwatch ${animated ? "active" : ""}`}
+          title={animated ? "Animated — click to add/update a keyframe here" : "Click to start animating"}
+          style={{ color: PROPERTY_COLORS[propKey] }}
+          onClick={() => addKeyframe(layerId, propKey)}
+        >
+          ◆
+        </button>
+        <span className="anim-row-label">{label}</span>
+        {animated && (
+          <button
+            className="link-btn"
+            title="Stop animating (clears all keyframes)"
+            onClick={() => {
+              if (confirm(`Remove all keyframes for ${label}?`)) {
+                anim.keyframes.forEach((k) => removeKeyframe(layerId, propKey, k.id));
+              }
+            }}
+          >
+            clear
+          </button>
+        )}
+      </div>
+      <div className="anim-row-value">{children}</div>
+      {animated && (
+        <div className="keyframe-list">
+          {[...anim.keyframes]
+            .sort((a, b) => a.time - b.time)
+            .map((k) => (
+              <div key={k.id} className="keyframe-list-item">
+                <button className="link-btn" onClick={() => setPlayhead(k.time)}>
+                  {k.time.toFixed(2)}s
+                </button>
+                <select
+                  value={k.easing}
+                  onChange={(e) => updateKeyframe(layerId, propKey, k.id, { easing: e.target.value as Easing })}
+                >
+                  {EASINGS.map((e) => (
+                    <option key={e} value={e}>
+                      {e}
+                    </option>
+                  ))}
+                </select>
+                <button className="link-btn danger" onClick={() => removeKeyframe(layerId, propKey, k.id)}>
+                  ✕
+                </button>
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NumberField({ value, onChange, step = 1, suffix }: { value: number; onChange: (v: number) => void; step?: number; suffix?: string }) {
+  return (
+    <label className="number-field">
+      <input type="number" value={Number.isFinite(value) ? round(value) : 0} step={step} onChange={(e) => onChange(parseFloat(e.target.value) || 0)} />
+      {suffix && <span>{suffix}</span>}
+    </label>
+  );
+}
+
+function round(v: number): number {
+  return Math.round(v * 1000) / 1000;
+}
+
+export function PropertiesPanel() {
+  const selectedLayerId = useEditorStore((s) => s.selectedLayerId);
+  const layer = useEditorStore((s) => s.project.composition.layers.find((l) => l.id === selectedLayerId));
+  const playhead = useEditorStore((s) => s.playhead);
+  const renameLayer = useEditorStore((s) => s.renameLayer);
+  const updateLayerTiming = useEditorStore((s) => s.updateLayerTiming);
+  const updateLayerProps = useEditorStore((s) => s.updateLayerProps);
+  const setStaticValue = useEditorStore((s) => s.setStaticValue);
+  const comp = useEditorStore((s) => s.project.composition);
+
+  if (!layer) {
+    return (
+      <div className="properties-panel empty">
+        <p>Select a layer to edit its properties.</p>
+      </div>
+    );
+  }
+
+  const evaluated = evaluateTransform(layer.transform, playhead);
+
+  const setPoint = (key: "position" | "scale", patch: Partial<Point>) => {
+    const current = key === "position" ? evaluated.position : evaluated.scale;
+    setStaticValue(layer.id, key, { ...current, ...patch });
+  };
+
+  return (
+    <div className="properties-panel">
+      <div className="properties-section">
+        <label className="field">
+          <span>Name</span>
+          <input value={layer.name} onChange={(e) => renameLayer(layer.id, e.target.value)} />
+        </label>
+        <div className="field-row">
+          <label className="field">
+            <span>Start (s)</span>
+            <input
+              type="number"
+              step={0.1}
+              value={layer.startTime}
+              onChange={(e) => updateLayerTiming(layer.id, parseFloat(e.target.value) || 0, layer.endTime)}
+            />
+          </label>
+          <label className="field">
+            <span>End (s)</span>
+            <input
+              type="number"
+              step={0.1}
+              value={layer.endTime}
+              onChange={(e) => updateLayerTiming(layer.id, layer.startTime, parseFloat(e.target.value) || 0)}
+            />
+          </label>
+        </div>
+      </div>
+
+      <div className="properties-section">
+        <h4>Content</h4>
+        {layer.type === "text" && (
+          <TextFields props={layer.props as TextLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
+        )}
+        {(layer.type === "rect" || layer.type === "ellipse") && (
+          <ShapeFields props={layer.props as ShapeLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
+        )}
+        {layer.type === "image" && (
+          <ImageFields props={layer.props as ImageLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
+        )}
+      </div>
+
+      <div className="properties-section">
+        <h4>Transform</h4>
+        <AnimRow layerId={layer.id} propKey="position" label="Position">
+          <NumberField value={evaluated.position.x} onChange={(x) => setPoint("position", { x })} />
+          <NumberField value={evaluated.position.y} onChange={(y) => setPoint("position", { y })} />
+        </AnimRow>
+        <AnimRow layerId={layer.id} propKey="scale" label="Scale %">
+          <NumberField value={evaluated.scale.x * 100} step={1} onChange={(x) => setPoint("scale", { x: x / 100 })} />
+          <NumberField value={evaluated.scale.y * 100} step={1} onChange={(y) => setPoint("scale", { y: y / 100 })} />
+        </AnimRow>
+        <AnimRow layerId={layer.id} propKey="rotation" label="Rotation">
+          <NumberField value={evaluated.rotation} step={1} suffix="°" onChange={(v) => setStaticValue(layer.id, "rotation", v)} />
+        </AnimRow>
+        <AnimRow layerId={layer.id} propKey="opacity" label="Opacity">
+          <NumberField
+            value={evaluated.opacity * 100}
+            step={1}
+            suffix="%"
+            onChange={(v) => setStaticValue(layer.id, "opacity", Math.max(0, Math.min(1, v / 100)))}
+          />
+        </AnimRow>
+      </div>
+
+      <div className="properties-section">
+        <h4>Composition</h4>
+        <p className="hint">
+          {comp.width}×{comp.height} · {comp.fps}fps · {comp.duration}s
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function TextFields({ props: p, onChange }: { props: TextLayerProps; onChange: (p: Partial<TextLayerProps>) => void }) {
+  return (
+    <>
+      <label className="field">
+        <span>Text</span>
+        <textarea value={p.content} onChange={(e) => onChange({ content: e.target.value })} />
+      </label>
+      <div className="field-row">
+        <label className="field">
+          <span>Size</span>
+          <input type="number" value={p.fontSize} onChange={(e) => onChange({ fontSize: parseFloat(e.target.value) || 1 })} />
+        </label>
+        <label className="field">
+          <span>Color</span>
+          <input type="color" value={p.color} onChange={(e) => onChange({ color: e.target.value })} />
+        </label>
+      </div>
+      <label className="field">
+        <span>Align</span>
+        <select value={p.align} onChange={(e) => onChange({ align: e.target.value as TextLayerProps["align"] })}>
+          <option value="left">Left</option>
+          <option value="center">Center</option>
+          <option value="right">Right</option>
+        </select>
+      </label>
+    </>
+  );
+}
+
+function ShapeFields({ props: p, onChange }: { props: ShapeLayerProps; onChange: (p: Partial<ShapeLayerProps>) => void }) {
+  return (
+    <>
+      <div className="field-row">
+        <label className="field">
+          <span>Width</span>
+          <input type="number" value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
+        </label>
+        <label className="field">
+          <span>Height</span>
+          <input type="number" value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
+        </label>
+      </div>
+      <div className="field-row">
+        <label className="field">
+          <span>Color</span>
+          <input type="color" value={p.color} onChange={(e) => onChange({ color: e.target.value })} />
+        </label>
+        {"radius" in p && (
+          <label className="field">
+            <span>Radius</span>
+            <input type="number" value={p.radius ?? 0} onChange={(e) => onChange({ radius: parseFloat(e.target.value) || 0 })} />
+          </label>
+        )}
+      </div>
+    </>
+  );
+}
+
+function ImageFields({ props: p, onChange }: { props: ImageLayerProps; onChange: (p: Partial<ImageLayerProps>) => void }) {
+  const handleFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = reader.result as string;
+      const img = new Image();
+      img.onload = () => onChange({ src, width: img.width, height: img.height });
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  };
+  return (
+    <>
+      <label className="field">
+        <span>Image file</span>
+        <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+      </label>
+      {p.src && <img src={p.src} alt="" className="image-preview" />}
+      <div className="field-row">
+        <label className="field">
+          <span>Width</span>
+          <input type="number" value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
+        </label>
+        <label className="field">
+          <span>Height</span>
+          <input type="number" value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
+        </label>
+      </div>
+    </>
+  );
+}
