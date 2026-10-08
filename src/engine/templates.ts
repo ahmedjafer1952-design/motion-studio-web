@@ -1,5 +1,5 @@
-import type { Composition, Layer, ShapeLayerProps, TextLayerProps } from "../types";
-import { createLayer, staticProp } from "./factory";
+import type { Composition, Layer } from "../types";
+import { makeRect, makeText } from "./builders";
 import { applyPresetToLayer } from "./presets";
 import { makeId } from "../utils/id";
 
@@ -19,64 +19,6 @@ export const MOTION_TEMPLATES: TemplateDef[] = [
   { id: "bigNumber", label: "Big Number", description: "A number that pops in large, for stats" },
   { id: "animatedList", label: "Animated List", description: "List items that appear one after another" },
 ];
-
-function makeText(
-  comp: Composition,
-  opts: {
-    content: string;
-    fontSize: number;
-    color: string;
-    align?: "left" | "center" | "right";
-    x: number;
-    y: number;
-    startTime?: number;
-    endTime?: number;
-    name: string;
-  }
-): Layer {
-  const layer = createLayer("text", comp);
-  const props: TextLayerProps = {
-    content: opts.content,
-    fontSize: opts.fontSize,
-    color: opts.color,
-    fontFamily: "Arial, sans-serif",
-    align: opts.align ?? "center",
-  };
-  return {
-    ...layer,
-    name: opts.name,
-    startTime: opts.startTime ?? 0,
-    endTime: opts.endTime ?? comp.duration,
-    transform: { ...layer.transform, position: staticProp({ x: opts.x, y: opts.y }) },
-    props,
-  };
-}
-
-function makeRect(
-  comp: Composition,
-  opts: {
-    width: number;
-    height: number;
-    color: string;
-    radius?: number;
-    x: number;
-    y: number;
-    startTime?: number;
-    endTime?: number;
-    name: string;
-  }
-): Layer {
-  const layer = createLayer("rect", comp);
-  const props: ShapeLayerProps = { width: opts.width, height: opts.height, color: opts.color, radius: opts.radius ?? 0 };
-  return {
-    ...layer,
-    name: opts.name,
-    startTime: opts.startTime ?? 0,
-    endTime: opts.endTime ?? comp.duration,
-    transform: { ...layer.transform, position: staticProp({ x: opts.x, y: opts.y }) },
-    props,
-  };
-}
 
 function titleCard(comp: Composition): Layer[] {
   const cx = comp.width / 2;

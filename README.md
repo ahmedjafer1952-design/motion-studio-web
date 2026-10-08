@@ -4,7 +4,15 @@ A browser-based motion graphics editor, inspired by After Effects: layers, a
 keyframeable timeline, a canvas-based compositor, and video export — all
 running client-side, no backend or account required.
 
-## Features (v0.4)
+## Features (v0.5)
+
+- **Faceless scenes**: 6 full-screen scene templates × 4 color variants each
+  (24 total) for when you don't want to show a person — Neon, Realistic
+  Product, 3D Mockup, Paper Collage, Pinned Note, Bouncing Words. Each
+  inserts a ready-animated background plus a product-image placeholder (an
+  empty image layer — swap in your own photo) with a smooth continuous
+  bounce/float loop, picked from a grouped dropdown.
+
 
 - **Layers**: text, rectangle, ellipse, polygon (3–12 sides), star, image,
   video (import an mp4/webm clip, trim its in-point), audio (import mp3/wav,
@@ -72,6 +80,10 @@ src/
                              # onto an existing layer
     templates.ts             # motion library — builds ready-animated groups
                               # of layers (title card, lower third, etc.)
+    builders.ts               # shared layer constructors used by templates
+                               # and scenes (makeText/makeRect/…)
+    scenes.ts                  # faceless scenes — full background + product
+                                # placeholder compositions, 6 types × 4 colors
   state/
     store.ts            # Zustand store: project state, undo/redo, actions
   components/
@@ -89,16 +101,17 @@ interferes with whatever the user is doing in the live editor.
 
 ## Roadmap ideas
 
-This covers "Auto Captions" and a first "Motion Library" slice of a larger
-plan. Next up, in order:
+This covers "Auto Captions", "Motion Library", and "Faceless Scenes" —
+three of the four big pieces of the original plan. Last one:
 
+- **Auto Edit**: ties everything above together — transcribes + understands
+  speech (detects lists, numbers, emphasis), and automatically assembles a
+  first cut (captions, a faceless scene or titles, zooms, transitions on
+  pauses, a CTA) as one undoable step.
+
+Smaller items:
 - **More motion library components**: orbiting icons, cards, a proper
   camera-move/transition preset between two layers, more templates.
-- **Faceless scenes**: full background scene templates (neon, product
-  mockup, paper collage, etc.) for when you don't want to show a person.
-- **Auto Edit**: ties the above together — transcribes + understands speech
-  (detects lists, numbers, emphasis), and automatically assembles a first
-  cut (titles, zooms, transitions on pauses, a CTA) as one undoable step.
 - **Sound library**: procedurally-generated UI sound effects (pop, whoosh,
   ding…) via the Web Audio API, playable on template insert and mixed into
   export.

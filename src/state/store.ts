@@ -13,6 +13,7 @@ import { createDefaultProject, createLayer } from "../engine/factory";
 import { evaluateTransform } from "../engine/evaluate";
 import { applyPresetToLayer, type PresetId } from "../engine/presets";
 import { buildTemplateLayers, type TemplateId } from "../engine/templates";
+import { buildScene, type SceneId } from "../engine/scenes";
 import { makeId } from "../utils/id";
 
 const MAX_HISTORY = 100;
@@ -44,6 +45,7 @@ interface EditorState {
   moveLayer: (layerId: string, direction: "up" | "down") => void;
   applyMotionPreset: (layerId: string, presetId: PresetId) => void;
   applyTemplate: (templateId: TemplateId) => void;
+  applyScene: (sceneId: SceneId) => void;
 
   setPlayhead: (time: number) => void;
   play: () => void;
@@ -188,6 +190,17 @@ export const useEditorStore = create<EditorState>((set, get) => {
       const layers = buildTemplateLayers(templateId, get().project.composition);
       commit(
         (p) => ({ ...p, composition: { ...p.composition, layers: [...layers, ...p.composition.layers] } }),
+        { selectedLayerId: layers[0]?.id ?? null }
+      );
+    },
+
+    applyScene: (sceneId) => {
+      const { layers, backgroundColor } = buildScene(sceneId, get().project.composition);
+      commit(
+        (p) => ({
+          ...p,
+          composition: { ...p.composition, backgroundColor, layers: [...layers, ...p.composition.layers] },
+        }),
         { selectedLayerId: layers[0]?.id ?? null }
       );
     },

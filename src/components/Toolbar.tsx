@@ -4,6 +4,7 @@ import type { Project } from "../types";
 import { downloadBlob } from "../utils/download";
 import { exportCompositionToVideo } from "../engine/export";
 import { MOTION_TEMPLATES, type TemplateId } from "../engine/templates";
+import { FACELESS_SCENES, type SceneId } from "../engine/scenes";
 
 function formatTime(t: number): string {
   const m = Math.floor(t / 60);
@@ -28,6 +29,7 @@ export function Toolbar() {
   const canUndo = useEditorStore((s) => s.past.length > 0);
   const canRedo = useEditorStore((s) => s.future.length > 0);
   const applyTemplate = useEditorStore((s) => s.applyTemplate);
+  const applyScene = useEditorStore((s) => s.applyScene);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -121,6 +123,31 @@ export function Toolbar() {
             <option key={t.id} value={t.id} title={t.description}>
               {t.label}
             </option>
+          ))}
+        </select>
+
+        <select
+          value=""
+          title="Insert a faceless scene (full background + product placeholder)"
+          onChange={(e) => {
+            if (e.target.value) applyScene(e.target.value as SceneId);
+            e.target.value = "";
+          }}
+        >
+          <option value="" disabled>
+            🎭 Faceless scene…
+          </option>
+          {(["neon", "product", "mockup", "collage", "note", "bounce"] as const).map((type) => (
+            <optgroup
+              key={type}
+              label={FACELESS_SCENES.find((s) => s.id.startsWith(type))?.label.split(" — ")[0] ?? type}
+            >
+              {FACELESS_SCENES.filter((s) => s.id.startsWith(`${type}-`)).map((s) => (
+                <option key={s.id} value={s.id} title={s.description}>
+                  {s.label}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </div>
