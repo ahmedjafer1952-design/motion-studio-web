@@ -47,6 +47,17 @@ function defaultProps(type: LayerType): Layer["props"] {
       return { src: "", fileName: "", width: 640, height: 360, trimIn: 0, naturalDuration: 0, muted: false };
     case "audio":
       return { src: "", fileName: "", trimIn: 0, naturalDuration: 0, muted: false };
+    case "caption":
+      return {
+        words: [],
+        style: "bigWord",
+        fontSize: 56,
+        color: "#ffffff",
+        emphasisColor: "#ffd166",
+        fontFamily: "Arial, sans-serif",
+        sourceTrimIn: 0,
+        sourceLayerName: "",
+      };
   }
 }
 
@@ -54,13 +65,18 @@ export function createLayer(type: LayerType, comp: Composition): Layer {
   const props = defaultProps(type);
   const w = "width" in props ? props.width : 300;
   const h = "height" in props ? props.height : 300;
+  const transform = defaultTransform(w, h, comp.width, comp.height);
+  if (type === "caption") {
+    // Classic caption placement: lower third, not dead center over the subject.
+    transform.position = staticProp<Point>({ x: comp.width / 2, y: comp.height * 0.82 });
+  }
   return {
     id: makeId("layer"),
     name: `${type[0].toUpperCase()}${type.slice(1)} ${comp.layers.length + 1}`,
     type,
     startTime: 0,
     endTime: comp.duration,
-    transform: defaultTransform(w, h, comp.width, comp.height),
+    transform,
     props,
   };
 }

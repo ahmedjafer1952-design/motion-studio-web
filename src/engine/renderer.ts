@@ -1,5 +1,7 @@
 import type {
   AudioLayerProps,
+  CaptionLayerProps,
+  CaptionWord,
   Composition,
   Layer,
   ImageLayerProps,
@@ -226,6 +228,96 @@ function drawStar(ctx: CanvasRenderingContext2D, w: number, h: number, points: n
   ctx.fill();
 }
 
+function findNearestPastWordIndex(words: CaptionWord[], t: number): number {
+  let idx = -1;
+  for (let i = 0; i < words.length; i++) {
+    if (words[i].start <= t) idx = i;
+    else break;
+  }
+  return idx;
+}
+
+/** Splits a flat word list into "lines" (sentence-ish chunks) by gaps between words. */
+function groupCaptionWordsIntoLines(words: CaptionWord[], gapThreshold = 0.6, maxWordsPerLine = 7): CaptionWord[][] {
+  const lines: CaptionWord[][] = [];
+  let current: CaptionWord[] = [];
+  for (const word of words) {
+    if (current.length > 0) {
+      const prev = current[current.length - 1];
+      if (word.start - prev.end > gapThreshold || current.length >= maxWordsPerLine) {
+        lines.push(current);
+        current = [];
+      }
+    }
+    current.push(word);
+  }
+  if (current.length) lines.push(current);
+  return lines;
+}
+
+function drawCaption(ctx: CanvasRenderingContext2D, p: CaptionLayerProps, t: number) {
+  if (p.words.length === 0) return;
+  ctx.direction = "rtl";
+  ctx.textBaseline = "middle";
+  ctx.font = `bold ${p.fontSize}px ${p.fontFamily}`;
+
+  if (p.style === "bigWord") {
+    const idx = t >= p.words[0].start ? findNearestPastWordIndex(p.words, t) : -1;
+    if (idx < 0) return;
+    const w = p.words[idx];
+    const isActive = t >= w.start && t <= w.end;
+    if (!isActive && t > w.end + 0.6) return; // don't linger too long on a stale word
+    const pop = isActive ? 1 + 0.18 * Math.max(0, 1 - (t - w.start) / 0.15) : 1;
+    ctx.save();
+    ctx.scale(pop, pop);
+    ctx.textAlign = "center";
+    ctx.fillStyle = w.emphasis ? p.emphasisColor : p.color;
+    ctx.fillText(w.text, 0, 0);
+    ctx.restore();
+    return;
+  }
+
+  const lines = groupCaptionWordsIntoLines(p.words);
+  const line = lines.find((l) => t >= l[0].start - 0.05 && t <= l[l.length - 1].end + 0.4);
+  if (!line) return;
+
+  if (p.style === "pillWord") {
+    const idx = line.findIndex((w) => t >= w.start && t <= w.end);
+    const w = idx >= 0 ? line[idx] : null;
+    if (!w) return;
+    ctx.textAlign = "center";
+    const metrics = ctx.measureText(w.text);
+    const padX = 22;
+    const padY = 14;
+    const bw = metrics.width + padX * 2;
+    const bh = p.fontSize + padY * 2;
+    ctx.save();
+    ctx.fillStyle = "rgba(15,15,18,0.55)";
+    ctx.beginPath();
+    ctx.roundRect(-bw / 2, -bh / 2, bw, bh, bh / 2);
+    ctx.fill();
+    ctx.fillStyle = w.emphasis ? p.emphasisColor : p.color;
+    ctx.fillText(w.text, 0, 0);
+    ctx.restore();
+    return;
+  }
+
+  // karaokeLine and emphasisOnly: lay out the whole line, right-to-left (Arabic reading order).
+  const gap = p.fontSize * 0.28;
+  const widths = line.map((w) => ctx.measureText(w.text).width);
+  const totalWidth = widths.reduce((a, b) => a + b, 0) + gap * (line.length - 1);
+  let x = totalWidth / 2;
+  ctx.textAlign = "right";
+  for (let i = 0; i < line.length; i++) {
+    const w = line[i];
+    const isActive = t >= w.start && t <= w.end;
+    const highlight = p.style === "emphasisOnly" ? w.emphasis : isActive || w.emphasis;
+    ctx.fillStyle = highlight ? p.emphasisColor : p.color;
+    ctx.fillText(w.text, x, 0);
+    x -= widths[i] + gap;
+  }
+}
+
 function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, opts: Required<RenderOptions>) {
   const active = time >= layer.startTime && time <= layer.endTime;
 
@@ -315,6 +407,12 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
       if (video.readyState >= 2) {
         ctx.drawImage(video, -p.width / 2, -p.height / 2, p.width, p.height);
       }
+      break;
+    }
+    case "caption": {
+      const p = layer.props as CaptionLayerProps;
+      const localTime = time - layer.startTime + p.sourceTrimIn;
+      drawCaption(ctx, p, localTime);
       break;
     }
   }

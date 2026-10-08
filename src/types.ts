@@ -24,7 +24,7 @@ export interface LayerTransform {
   opacity: AnimatedProperty<number>; // 0..1
 }
 
-export type LayerType = "text" | "rect" | "ellipse" | "polygon" | "star" | "image" | "video" | "audio";
+export type LayerType = "text" | "rect" | "ellipse" | "polygon" | "star" | "image" | "video" | "audio" | "caption";
 
 export interface TextLayerProps {
   content: string;
@@ -80,6 +80,28 @@ export interface AudioLayerProps {
   muted: boolean;
 }
 
+export type CaptionStyle = "bigWord" | "karaokeLine" | "pillWord" | "emphasisOnly";
+
+export interface CaptionWord {
+  id: string;
+  text: string;
+  start: number; // seconds, relative to the source media's own timeline
+  end: number;
+  emphasis: boolean;
+}
+
+export interface CaptionLayerProps {
+  words: CaptionWord[];
+  style: CaptionStyle;
+  fontSize: number;
+  color: string;
+  emphasisColor: string;
+  fontFamily: string;
+  /** trimIn of the source layer at the moment captions were generated, so timing stays in sync. */
+  sourceTrimIn: number;
+  sourceLayerName: string; // informational only
+}
+
 export interface Layer {
   id: string;
   name: string;
@@ -94,7 +116,8 @@ export interface Layer {
     | StarLayerProps
     | ImageLayerProps
     | VideoLayerProps
-    | AudioLayerProps;
+    | AudioLayerProps
+    | CaptionLayerProps;
 }
 
 export interface Composition {

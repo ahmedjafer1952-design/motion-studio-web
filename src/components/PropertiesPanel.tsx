@@ -1,8 +1,12 @@
+import { useState } from "react";
 import type {
   AnimatablePropKey,
   AudioLayerProps,
+  CaptionLayerProps,
+  CaptionWord,
   Easing,
   ImageLayerProps,
+  Layer,
   PolygonLayerProps,
   Point,
   ShapeLayerProps,
@@ -13,6 +17,8 @@ import type {
 import { useEditorStore } from "../state/store";
 import { evaluateTransform } from "../engine/evaluate";
 import { PROPERTY_COLORS } from "./Timeline/constants";
+import type { ModelSize, TranscribeProgress } from "../engine/transcribe";
+import { makeId } from "../utils/id";
 
 const EASINGS: Easing[] = ["linear", "easeIn", "easeOut", "easeInOut"];
 
@@ -181,6 +187,13 @@ export function PropertiesPanel() {
             onFitDuration={(naturalDuration, trimIn) =>
               updateLayerTiming(layer.id, layer.startTime, layer.startTime + Math.max(0.1, naturalDuration - trimIn))
             }
+          />
+        )}
+        {layer.type === "caption" && (
+          <CaptionFields
+            layerId={layer.id}
+            props={layer.props as CaptionLayerProps}
+            onChange={(p) => updateLayerProps(layer.id, p)}
           />
         )}
         {layer.type === "image" && (
@@ -489,6 +502,170 @@ function AudioFields({
       <p className="hint">
         Audio is session-only: it isn't saved inside the project JSON. Re-add the file after reloading the page.
       </p>
+    </>
+  );
+}
+
+function progressLabel(p: TranscribeProgress): string {
+  if (p.phase === "loading-model") {
+    return p.progress != null ? `Loading speech model ${Math.round(p.progress * 100)}%…` : "Loading speech model…";
+  }
+  if (p.phase === "decoding-audio") return "Reading audio…";
+  return "Transcribing…";
+}
+
+function CaptionFields({
+  layerId,
+  props: p,
+  onChange,
+}: {
+  layerId: string;
+  props: CaptionLayerProps;
+  onChange: (p: Partial<CaptionLayerProps>) => void;
+}) {
+  const layers = useEditorStore((s) => s.project.composition.layers);
+  const updateLayerTiming = useEditorStore((s) => s.updateLayerTiming);
+
+  const sourceCandidates = layers.filter(
+    (l): l is Layer & { props: VideoLayerProps | AudioLayerProps } =>
+      (l.type === "video" || l.type === "audio") && !!(l.props as VideoLayerProps | AudioLayerProps).src
+  );
+
+  const [sourceId, setSourceId] = useState<string>(sourceCandidates[0]?.id ?? "");
+  const [modelSize, setModelSize] = useState<ModelSize>("base");
+  const [progress, setProgress] = useState<TranscribeProgress | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleTranscribe = async () => {
+    const sourceLayer = sourceCandidates.find((l) => l.id === sourceId);
+    if (!sourceLayer) return;
+    setError(null);
+    setProgress({ phase: "loading-model" });
+    try {
+      const sourceProps = sourceLayer.props as VideoLayerProps | AudioLayerProps;
+      const { transcribeMediaSource } = await import("../engine/transcribe");
+      const words = await transcribeMediaSource(sourceProps.src, { modelSize, onProgress: setProgress });
+      onChange({
+        words: words.map((w) => ({ id: makeId("word"), text: w.text, start: w.start, end: w.end, emphasis: false })),
+        sourceTrimIn: sourceProps.trimIn,
+        sourceLayerName: sourceLayer.name,
+      });
+      updateLayerTiming(layerId, sourceLayer.startTime, sourceLayer.endTime);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProgress(null);
+    }
+  };
+
+  const updateWord = (idx: number, patch: Partial<CaptionWord>) =>
+    onChange({ words: p.words.map((w, i) => (i === idx ? { ...w, ...patch } : w)) });
+  const removeWord = (idx: number) => onChange({ words: p.words.filter((_, i) => i !== idx) });
+
+  return (
+    <>
+      {sourceCandidates.length === 0 ? (
+        <p className="hint">
+          Add a video or audio layer with a file first, then come back here to generate captions from it.
+        </p>
+      ) : (
+        <>
+          <label className="field">
+            <span>Generate from</span>
+            <select value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
+              {sourceCandidates.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>Model (bigger = slower, more accurate)</span>
+            <select value={modelSize} onChange={(e) => setModelSize(e.target.value as ModelSize)}>
+              <option value="tiny">Tiny (fast)</option>
+              <option value="base">Base (recommended)</option>
+              <option value="small">Small (best accuracy)</option>
+            </select>
+          </label>
+          <button type="button" onClick={handleTranscribe} disabled={!!progress}>
+            {progress ? progressLabel(progress) : "🎙 Transcribe"}
+          </button>
+          {error && <p className="hint error">{error}</p>}
+          <p className="hint">
+            Transcription runs fully in your browser — nothing is uploaded. The speech model downloads once (tens of
+            MBs) and is cached afterwards. Iraqi dialect is supported but not perfect; correct words below as needed.
+          </p>
+        </>
+      )}
+
+      {p.words.length > 0 && (
+        <>
+          <label className="field">
+            <span>Style</span>
+            <select
+              value={p.style}
+              onChange={(e) => onChange({ style: e.target.value as CaptionLayerProps["style"] })}
+            >
+              <option value="bigWord">Big word (one at a time)</option>
+              <option value="karaokeLine">Karaoke line (highlight as spoken)</option>
+              <option value="pillWord">Pill / glass badge</option>
+              <option value="emphasisOnly">Line + emphasis only</option>
+            </select>
+          </label>
+          <div className="field-row">
+            <label className="field">
+              <span>Size</span>
+              <input
+                type="number"
+                value={p.fontSize}
+                onChange={(e) => onChange({ fontSize: parseFloat(e.target.value) || 1 })}
+              />
+            </label>
+            <label className="field">
+              <span>Color</span>
+              <input type="color" value={p.color} onChange={(e) => onChange({ color: e.target.value })} />
+            </label>
+          </div>
+          <label className="field">
+            <span>Emphasis color (starred words)</span>
+            <input
+              type="color"
+              value={p.emphasisColor}
+              onChange={(e) => onChange({ emphasisColor: e.target.value })}
+            />
+          </label>
+
+          <p className="hint">
+            {p.words.length} words · from {p.sourceLayerName || "—"}. Star a word to emphasize it (color +
+            highlight) — the equivalent of wrapping it in [brackets].
+          </p>
+          <div className="caption-word-list">
+            {p.words.map((w, i) => (
+              <div key={w.id} className="caption-word-row">
+                <button
+                  type="button"
+                  className={`star-toggle ${w.emphasis ? "active" : ""}`}
+                  title="Mark important"
+                  onClick={() => updateWord(i, { emphasis: !w.emphasis })}
+                >
+                  ★
+                </button>
+                <input
+                  className="caption-word-input"
+                  dir="rtl"
+                  value={w.text}
+                  onChange={(e) => updateWord(i, { text: e.target.value })}
+                />
+                <span className="caption-word-time">{w.start.toFixed(1)}s</span>
+                <button type="button" className="link-btn danger" onClick={() => removeWord(i)}>
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </>
   );
 }
