@@ -1,8 +1,8 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEditorStore } from "../../state/store";
 import { Ruler } from "./Ruler";
 import { LayerRow } from "./LayerRow";
-import { PIXELS_PER_SECOND } from "./constants";
+import { TimelineScaleContext, fitPixelsPerSecond } from "./constants";
 
 const LABEL_WIDTH = 200;
 
@@ -13,6 +13,18 @@ export function Timeline() {
   const pause = useEditorStore((s) => s.pause);
   const comp = project.composition;
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const [trackWidth, setTrackWidth] = useState(0);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setTrackWidth(el.clientWidth));
+    observer.observe(el);
+    setTrackWidth(el.clientWidth);
+    return () => observer.disconnect();
+  }, []);
+
+  const PIXELS_PER_SECOND = fitPixelsPerSecond(trackWidth, comp.duration);
 
   const scrubFromEvent = (e: React.MouseEvent) => {
     const el = scrollRef.current;
@@ -43,6 +55,7 @@ export function Timeline() {
   };
 
   return (
+    <TimelineScaleContext.Provider value={PIXELS_PER_SECOND}>
     <div className="timeline">
       <div className="timeline-header-row">
         <div className="timeline-label-spacer" style={{ width: LABEL_WIDTH }}>
@@ -60,5 +73,6 @@ export function Timeline() {
         ))}
       </div>
     </div>
+    </TimelineScaleContext.Provider>
   );
 }

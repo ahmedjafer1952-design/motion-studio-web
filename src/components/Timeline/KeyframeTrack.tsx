@@ -1,10 +1,11 @@
 import type { Layer } from "../../types";
 import { useEditorStore } from "../../state/store";
-import { PIXELS_PER_SECOND, PROPERTY_COLORS, PROPERTY_ORDER } from "./constants";
+import { PROPERTY_COLORS, PROPERTY_ORDER, useTimelineScale } from "./constants";
 
 export function KeyframeTrack({ layer }: { layer: Layer }) {
   const selectLayer = useEditorStore((s) => s.selectLayer);
   const setPlayhead = useEditorStore((s) => s.setPlayhead);
+  const PIXELS_PER_SECOND = useTimelineScale();
 
   return (
     <div

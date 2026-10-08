@@ -8,6 +8,7 @@ import type {
   LayerType,
   Point,
   Project,
+  VideoLayerProps,
 } from "../types";
 import { createDefaultProject, createLayer } from "../engine/factory";
 import { evaluateTransform } from "../engine/evaluate";
@@ -51,6 +52,8 @@ interface EditorState {
   applyTemplate: (templateId: TemplateId) => void;
   applyScene: (sceneId: SceneId) => void;
   insertSticker: (stickerId: StickerId) => void;
+  attachVideo: (layerId: string, media: AttachedVideo) => void;
+  attachAudio: (layerId: string, media: AttachedAudio) => void;
   applyAutoEdit: (sourceLayerId: string, words: TranscribedWord[], opts: AutoEditOptions) => void;
 
   setPlayhead: (time: number) => void;
@@ -69,6 +72,35 @@ interface EditorState {
   setStaticValue: (layerId: string, propKey: AnimatablePropKey, value: unknown) => void;
 
   setExporting: (isExporting: boolean, progress?: number) => void;
+}
+
+export interface AttachedAudio {
+  src: string;
+  fileName: string;
+  naturalDuration: number;
+}
+
+export interface AttachedVideo extends AttachedAudio {
+  videoWidth: number;
+  videoHeight: number;
+}
+
+/** Longest side of a composition auto-matched to an imported clip — keeps preview/export real-time. */
+const AUTO_COMP_MAX_SIDE = 1280;
+
+function even(n: number): number {
+  return Math.max(2, Math.round(n / 2) * 2);
+}
+
+/** Sets a media layer to span its whole clip, and grows the composition so nothing gets cut off. */
+function fitLayerToClip(comp: Composition, layer: Layer, naturalDuration: number): Composition {
+  const clipLength = Math.max(0.1, naturalDuration);
+  const endTime = layer.startTime + clipLength;
+  return {
+    ...comp,
+    duration: Math.max(comp.duration, endTime),
+    layers: comp.layers.map((l) => (l.id === layer.id ? { ...layer, endTime } : l)),
+  };
 }
 
 function cloneLayer(layer: Layer): Layer {
@@ -183,10 +215,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
       })),
 
     updateLayerTiming: (layerId, startTime, endTime) =>
-      commit((p) => ({
-        ...p,
-        composition: mapLayers(p.composition, layerId, (l) => ({ ...l, startTime, endTime })),
-      })),
+      commit((p) => {
+        const comp = mapLayers(p.composition, layerId, (l) => ({ ...l, startTime, endTime }));
+        return { ...p, composition: { ...comp, duration: Math.max(comp.duration, endTime) } };
+      }),
 
     moveLayer: (layerId, direction) =>
       commit((p) => {
@@ -230,6 +262,47 @@ export const useEditorStore = create<EditorState>((set, get) => {
         (p) => ({ ...p, composition: { ...p.composition, layers: [...layers, ...p.composition.layers] } }),
         { selectedLayerId: layers[0]?.id ?? null }
       );
+    },
+
+    attachVideo: (layerId, media) => {
+      commit((p) => {
+        let comp = p.composition;
+        const layer = comp.layers.find((l) => l.id === layerId);
+        if (!layer) return p;
+        const vw = media.videoWidth || (layer.props as VideoLayerProps).width;
+        const vh = media.videoHeight || (layer.props as VideoLayerProps).height;
+
+        // A fresh project takes the shape of its first clip (e.g. a vertical phone video → 9:16).
+        const onlyLayer = comp.layers.length === 1;
+        if (onlyLayer && vw > 0 && vh > 0) {
+          const scale = Math.min(1, AUTO_COMP_MAX_SIDE / Math.max(vw, vh));
+          comp = { ...comp, width: even(vw * scale), height: even(vh * scale) };
+        }
+
+        const fit = Math.min(comp.width / vw, comp.height / vh);
+        const next = cloneLayer(layer);
+        next.props = {
+          ...(layer.props as VideoLayerProps),
+          src: media.src,
+          fileName: media.fileName,
+          naturalDuration: media.naturalDuration,
+          trimIn: 0,
+          width: Math.round(vw * fit),
+          height: Math.round(vh * fit),
+        };
+        next.transform.position.static = { x: comp.width / 2, y: comp.height / 2 };
+        return { ...p, composition: fitLayerToClip(comp, next, media.naturalDuration) };
+      });
+    },
+
+    attachAudio: (layerId, media) => {
+      commit((p) => {
+        const layer = p.composition.layers.find((l) => l.id === layerId);
+        if (!layer) return p;
+        const next = cloneLayer(layer);
+        next.props = { ...layer.props, src: media.src, fileName: media.fileName, naturalDuration: media.naturalDuration, trimIn: 0 } as Layer["props"];
+        return { ...p, composition: fitLayerToClip(p.composition, next, media.naturalDuration) };
+      });
     },
 
     applyAutoEdit: (sourceLayerId, words, opts) => {

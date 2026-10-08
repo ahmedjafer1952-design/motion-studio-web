@@ -1,4 +1,5 @@
 import { pipeline, env } from "@xenova/transformers";
+import { resolveMediaUrl } from "./mediaStore";
 
 // Model weights are fetched from the Hugging Face Hub at runtime and cached by the
 // browser (IndexedDB/Cache Storage) — nothing is bundled into the app itself.
@@ -56,7 +57,9 @@ async function getAsrPipeline(modelSize: ModelSize, onProgress?: (p: TranscribeP
 }
 
 async function decodeTo16kMono(src: string): Promise<Float32Array> {
-  const res = await fetch(src);
+  const url = await resolveMediaUrl(src);
+  if (!url) throw new Error("The source media file is missing — re-attach it to the video/audio layer.");
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`Could not read the source media (HTTP ${res.status}).`);
   const arrayBuffer = await res.arrayBuffer();
   const AudioCtxCtor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;

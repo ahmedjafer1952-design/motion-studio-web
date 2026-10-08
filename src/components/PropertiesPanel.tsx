@@ -16,7 +16,8 @@ import type {
   TextLayerProps,
   VideoLayerProps,
 } from "../types";
-import { useEditorStore } from "../state/store";
+import { useEditorStore, type AttachedAudio, type AttachedVideo } from "../state/store";
+import { storeMediaFile } from "../engine/mediaStore";
 import { evaluateTransform } from "../engine/evaluate";
 import { PROPERTY_COLORS } from "./Timeline/constants";
 import type { ModelSize, TranscribeProgress } from "../engine/transcribe";
@@ -124,14 +125,12 @@ export function PropertiesPanel() {
   const updateLayerProps = useEditorStore((s) => s.updateLayerProps);
   const setStaticValue = useEditorStore((s) => s.setStaticValue);
   const applyMotionPreset = useEditorStore((s) => s.applyMotionPreset);
+  const attachVideo = useEditorStore((s) => s.attachVideo);
+  const attachAudio = useEditorStore((s) => s.attachAudio);
   const comp = useEditorStore((s) => s.project.composition);
 
   if (!layer) {
-    return (
-      <div className="properties-panel empty">
-        <p>Select a layer to edit its properties.</p>
-      </div>
-    );
+    return <CompositionSettings />;
   }
 
   const evaluated = evaluateTransform(layer.transform, playhead);
@@ -188,6 +187,7 @@ export function PropertiesPanel() {
           <AudioFields
             props={layer.props as AudioLayerProps}
             onChange={(p) => updateLayerProps(layer.id, p)}
+            onAttach={(media) => attachAudio(layer.id, media)}
             onFitDuration={(naturalDuration, trimIn) =>
               updateLayerTiming(layer.id, layer.startTime, layer.startTime + Math.max(0.1, naturalDuration - trimIn))
             }
@@ -213,6 +213,7 @@ export function PropertiesPanel() {
           <VideoFields
             props={layer.props as VideoLayerProps}
             onChange={(p) => updateLayerProps(layer.id, p)}
+            onAttach={(media) => attachVideo(layer.id, media)}
             onFitDuration={(naturalDuration, trimIn) =>
               updateLayerTiming(layer.id, layer.startTime, layer.startTime + Math.max(0.1, naturalDuration - trimIn))
             }
@@ -331,30 +332,114 @@ function ShapeFields({ props: p, onChange }: { props: ShapeLayerProps; onChange:
   );
 }
 
+const SIZE_PRESETS: { label: string; width: number; height: number }[] = [
+  { label: "16:9 أفقي — 1280×720", width: 1280, height: 720 },
+  { label: "9:16 عمودي (ريلز/تيك توك) — 720×1280", width: 720, height: 1280 },
+  { label: "1:1 مربع — 1080×1080", width: 1080, height: 1080 },
+  { label: "4:5 بوست — 1080×1350", width: 1080, height: 1350 },
+  { label: "16:9 Full HD — 1920×1080", width: 1920, height: 1080 },
+];
+
+function CompositionSettings() {
+  const comp = useEditorStore((s) => s.project.composition);
+  const updateComposition = useEditorStore((s) => s.updateComposition);
+  const presetValue = SIZE_PRESETS.findIndex((p) => p.width === comp.width && p.height === comp.height);
+  return (
+    <div className="properties-panel">
+      <div className="properties-section">
+        <h4>Project</h4>
+        <label className="field">
+          <span>Length (seconds)</span>
+          <input
+            type="number"
+            min={0.5}
+            step={0.5}
+            value={Number(comp.duration.toFixed(2))}
+            onChange={(e) => updateComposition({ duration: Math.max(0.5, parseFloat(e.target.value) || 0.5) })}
+          />
+        </label>
+        <label className="field">
+          <span>Frame size</span>
+          <select
+            value={presetValue}
+            onChange={(e) => {
+              const preset = SIZE_PRESETS[parseInt(e.target.value, 10)];
+              if (preset) updateComposition({ width: preset.width, height: preset.height });
+            }}
+          >
+            {presetValue === -1 && (
+              <option value={-1}>
+                Custom — {comp.width}×{comp.height}
+              </option>
+            )}
+            {SIZE_PRESETS.map((p, i) => (
+              <option key={p.label} value={i}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>Background</span>
+          <input type="color" value={comp.backgroundColor} onChange={(e) => updateComposition({ backgroundColor: e.target.value })} />
+        </label>
+        <p className="hint">
+          Importing a video sets the length to the clip automatically, and a new project takes the clip's shape (e.g.
+          vertical for phone videos). Changing the frame size doesn't move existing layers.
+        </p>
+      </div>
+      <p className="hint">Select a layer to edit its properties.</p>
+    </div>
+  );
+}
+
+/** Reads a media file's duration (and video dimensions) — null if the browser can't decode it. */
+function probeMedia(file: File, kind: "video" | "audio"): Promise<{ duration: number; width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const el = document.createElement(kind);
+    el.preload = "metadata";
+    const done = (result: { duration: number; width: number; height: number } | null) => {
+      URL.revokeObjectURL(url);
+      resolve(result);
+    };
+    el.onloadedmetadata = () => {
+      const v = el as HTMLVideoElement;
+      done({ duration: Number.isFinite(el.duration) ? el.duration : 0, width: v.videoWidth || 0, height: v.videoHeight || 0 });
+    };
+    el.onerror = () => done(null);
+    el.src = url;
+  });
+}
+
 function VideoFields({
   props: p,
   onChange,
   onFitDuration,
+  onAttach,
 }: {
   props: VideoLayerProps;
   onChange: (p: Partial<VideoLayerProps>) => void;
   onFitDuration: (naturalDuration: number, trimIn: number) => void;
+  onAttach: (media: AttachedVideo) => void;
 }) {
-  const handleFile = (file: File) => {
-    const src = URL.createObjectURL(file);
-    const probe = document.createElement("video");
-    probe.preload = "metadata";
-    probe.onloadedmetadata = () => {
-      onChange({
-        src,
-        fileName: file.name,
-        width: probe.videoWidth || p.width,
-        height: probe.videoHeight || p.height,
-        trimIn: 0,
-        naturalDuration: probe.duration || 0,
-      });
-    };
-    probe.src = src;
+  const [status, setStatus] = useState<string | null>(null);
+  const handleFile = async (file: File) => {
+    setStatus("Loading…");
+    const meta = await probeMedia(file, "video");
+    if (!meta) {
+      setStatus("This browser can't play this video file. Try an mp4 (H.264) or webm.");
+      return;
+    }
+    const { src, persisted } = await storeMediaFile(file);
+    onAttach({
+      src,
+      fileName: file.name,
+      naturalDuration: meta.duration,
+      videoWidth: meta.width,
+      videoHeight: meta.height,
+    });
+    setStatus(persisted ? null : "Couldn't save the file for later — it'll need re-attaching after a reload.");
   };
   return (
     <>
@@ -362,6 +447,10 @@ function VideoFields({
         <span>Video file (mp4, webm…)</span>
         <input type="file" accept="video/*" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
       </label>
+      {status && <p className="hint error">{status}</p>}
+      {!status && p.src.startsWith("blob:") && (
+        <p className="hint error">This file was imported before files were saved with the project — if it shows black, pick it again.</p>
+      )}
       {p.src && (
         <p className="hint">
           {p.fileName || "video"} · source length {p.naturalDuration.toFixed(2)}s
@@ -397,7 +486,7 @@ function VideoFields({
         <span>Mute audio</span>
       </label>
       <p className="hint">
-        Video is session-only: it isn't saved inside the project JSON. Re-add the file after reloading the page.
+        The file is kept in this browser, so it survives reloads. Saved project .json files don't include it — on another device, pick it again.
       </p>
     </>
   );
@@ -483,19 +572,24 @@ function AudioFields({
   props: p,
   onChange,
   onFitDuration,
+  onAttach,
 }: {
   props: AudioLayerProps;
   onChange: (p: Partial<AudioLayerProps>) => void;
   onFitDuration: (naturalDuration: number, trimIn: number) => void;
+  onAttach: (media: AttachedAudio) => void;
 }) {
-  const handleFile = (file: File) => {
-    const src = URL.createObjectURL(file);
-    const probe = document.createElement("audio");
-    probe.preload = "metadata";
-    probe.onloadedmetadata = () => {
-      onChange({ src, fileName: file.name, trimIn: 0, naturalDuration: probe.duration || 0 });
-    };
-    probe.src = src;
+  const [status, setStatus] = useState<string | null>(null);
+  const handleFile = async (file: File) => {
+    setStatus("Loading…");
+    const meta = await probeMedia(file, "audio");
+    if (!meta) {
+      setStatus("This browser can't play this audio file. Try mp3, wav or m4a.");
+      return;
+    }
+    const { src, persisted } = await storeMediaFile(file);
+    onAttach({ src, fileName: file.name, naturalDuration: meta.duration });
+    setStatus(persisted ? null : "Couldn't save the file for later — it'll need re-attaching after a reload.");
   };
   return (
     <>
@@ -503,6 +597,10 @@ function AudioFields({
         <span>Audio file (mp3, wav…)</span>
         <input type="file" accept="audio/*" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
       </label>
+      {status && <p className="hint error">{status}</p>}
+      {!status && p.src.startsWith("blob:") && (
+        <p className="hint error">This file was imported before files were saved with the project — if it shows black, pick it again.</p>
+      )}
       {p.src && (
         <p className="hint">
           {p.fileName || "audio"} · source length {p.naturalDuration.toFixed(2)}s
@@ -528,7 +626,7 @@ function AudioFields({
         <span>Mute</span>
       </label>
       <p className="hint">
-        Audio is session-only: it isn't saved inside the project JSON. Re-add the file after reloading the page.
+        The file is kept in this browser, so it survives reloads. Saved project .json files don't include it — on another device, pick it again.
       </p>
     </>
   );

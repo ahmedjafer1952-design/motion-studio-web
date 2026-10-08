@@ -6,7 +6,7 @@ automatically. Layers, a keyframeable timeline, a canvas-based compositor,
 speech-to-text, and video export, all running client-side: no backend, no
 account, no upload.
 
-## Features (v0.7)
+## Features (v0.8)
 
 - **Layers**: text (incl. a typewriter reveal, `[bracket]` word-highlighting,
   and a 0→N count-up mode), rectangle, ellipse, polygon (3–12 sides), star,
@@ -83,9 +83,17 @@ account, no upload.
   `MediaRecorder`, with video/audio layer audio mixed in via the Web Audio
   API. No server required.
 - **Save / Load**: projects are plain JSON files you can save and reopen, and
-  the current project auto-saves to `localStorage`. Note: video/audio files
-  themselves are session-only (held as an in-memory object URL) — re-attach
-  the file after reloading the page or reopening a saved project.
+  the current project auto-saves to `localStorage`. Imported video/audio
+  files are kept in the browser's IndexedDB and referenced by a stable
+  `idb:` id, so they survive page reloads (library sounds use `sound:` ids
+  and are re-synthesized on demand). A saved `.json` doesn't contain the
+  media itself — on another device, pick the files again.
+- **Clips drive the project**: importing a video makes the layer span the
+  whole clip and extends the project length to match; a fresh project also
+  takes the clip's shape (a vertical phone video → a 9:16 frame). The clip
+  is fitted inside the frame, never cropped. Project length, frame size
+  (16:9 / 9:16 / 1:1 / 4:5 presets) and background are editable from the
+  properties panel when no layer is selected. The timeline zooms to fit.
 
 ## Getting started
 
@@ -137,6 +145,8 @@ src/
                                     # overlay effect metadata
     sounds.ts                       # 19 synthesized UI sounds (Web Audio
                                      # OfflineAudioContext → WAV blob, cached)
+    mediaStore.ts                    # persists imported media in IndexedDB;
+                                      # resolves idb:/sound: refs to URLs
   state/
     store.ts            # Zustand store: project state, undo/redo, actions
   components/
@@ -175,8 +185,6 @@ icons/camera presets, sound library, stickers/overlays) are all in. Next:
   camera-move/transition preset between two layers, more templates.
 - Drag keyframes directly on the timeline (currently edited via the
   properties panel + "add keyframe at playhead" stopwatch button).
-- Persisting uploaded video/image/audio files across reloads (e.g.
-  IndexedDB) instead of session-only object URLs.
 - A visible waveform for audio/video layers on the timeline.
 - More caption styles; editable word timing (currently text-only correction).
 - Rotation support for glass panels (currently position/scale/opacity only).

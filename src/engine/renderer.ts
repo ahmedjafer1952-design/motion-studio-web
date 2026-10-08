@@ -15,6 +15,7 @@ import type {
 } from "../types";
 import { evaluateTransform } from "./evaluate";
 import { getColorGrade } from "./colorGrade";
+import { resolveMediaUrl } from "./mediaStore";
 
 export interface RenderOptions {
   playing: boolean;
@@ -32,6 +33,17 @@ export class MediaSession {
   images = new Map<string, HTMLImageElement>();
   videos = new Map<string, HTMLVideoElement>();
   audios = new Map<string, HTMLAudioElement>();
+  /** Last successfully decoded frame per video, drawn while a seek is in flight so the canvas never flashes black. */
+  frameCache = new Map<HTMLVideoElement, { canvas: HTMLCanvasElement; time: number }>();
+  /** Called when a video has a new frame available outside the playback loop (after load or a seek). */
+  onFrameReady: (() => void) | null = null;
+
+  private attachSource(el: HTMLMediaElement, src: string) {
+    resolveMediaUrl(src).then((url) => {
+      if (url) el.src = url;
+      else el.dispatchEvent(new Event("error"));
+    });
+  }
 
   getImage(src: string): HTMLImageElement | null {
     const cached = this.images.get(src);
@@ -45,11 +57,15 @@ export class MediaSession {
   getVideo(src: string): HTMLVideoElement {
     let video = this.videos.get(src);
     if (!video) {
-      video = document.createElement("video");
-      video.src = src;
-      video.playsInline = true;
-      video.preload = "auto";
-      this.videos.set(src, video);
+      const el = document.createElement("video");
+      el.playsInline = true;
+      el.preload = "auto";
+      const notify = () => this.onFrameReady?.();
+      el.addEventListener("loadeddata", notify);
+      el.addEventListener("seeked", notify);
+      this.attachSource(el, src);
+      this.videos.set(src, el);
+      video = el;
     }
     return video;
   }
@@ -58,11 +74,29 @@ export class MediaSession {
     let audio = this.audios.get(src);
     if (!audio) {
       audio = document.createElement("audio");
-      audio.src = src;
       audio.preload = "auto";
+      this.attachSource(audio, src);
       this.audios.set(src, audio);
     }
     return audio;
+  }
+
+  /** Draws the video's current frame, or its last good frame while it's seeking/buffering. */
+  drawVideoFrame(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, x: number, y: number, w: number, h: number) {
+    let cache = this.frameCache.get(video);
+    if (video.readyState >= 2 && video.videoWidth > 0) {
+      if (!cache) {
+        cache = { canvas: document.createElement("canvas"), time: -1 };
+        this.frameCache.set(video, cache);
+      }
+      if (cache.time !== video.currentTime || cache.canvas.width !== video.videoWidth) {
+        cache.canvas.width = video.videoWidth;
+        cache.canvas.height = video.videoHeight;
+        cache.canvas.getContext("2d")?.drawImage(video, 0, 0);
+        cache.time = video.currentTime;
+      }
+    }
+    if (cache && cache.time >= 0) ctx.drawImage(cache.canvas, x, y, w, h);
   }
 
   preloadImages(comp: Composition): Promise<void[]> {
@@ -134,6 +168,7 @@ export class MediaSession {
       audio.load();
     }
     this.images.clear();
+    this.frameCache.clear();
     this.videos.clear();
     this.audios.clear();
   }
@@ -161,7 +196,7 @@ function waitForMediaReady(el: HTMLMediaElement): Promise<void> {
   });
 }
 
-const defaultSession = new MediaSession();
+export const defaultSession = new MediaSession();
 
 /** Syncs a video/audio element's play/pause/seek state to the composition clock. Returns the element, or null if inactive/unavailable. */
 function syncMediaElement(
@@ -577,9 +612,7 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
       const p = layer.props as VideoLayerProps;
       if (!p.src) break;
       const video = opts.session.getVideo(p.src);
-      if (video.readyState >= 2) {
-        ctx.drawImage(video, -p.width / 2, -p.height / 2, p.width, p.height);
-      }
+      opts.session.drawVideoFrame(ctx, video, -p.width / 2, -p.height / 2, p.width, p.height);
       break;
     }
     case "caption": {

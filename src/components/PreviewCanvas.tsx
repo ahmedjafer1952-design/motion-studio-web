@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEditorStore } from "../state/store";
-import { renderComposition } from "../engine/renderer";
+import { defaultSession, renderComposition } from "../engine/renderer";
 
 export function PreviewCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -13,6 +13,15 @@ export function PreviewCanvas() {
   const comp = project.composition;
   const rafRef = useRef<number | null>(null);
   const lastTsRef = useRef<number | null>(null);
+  const [frameTick, setFrameTick] = useState(0);
+
+  // A video finished loading or seeking: redraw so the canvas shows the real frame, not a stale/black one.
+  useEffect(() => {
+    defaultSession.onFrameReady = () => setFrameTick((n) => n + 1);
+    return () => {
+      defaultSession.onFrameReady = null;
+    };
+  }, []);
 
   // Draw whenever composition, playhead, or play state changes (covers paused scrubbing + edits).
   useEffect(() => {
@@ -21,7 +30,7 @@ export function PreviewCanvas() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     renderComposition(ctx, comp, playhead, { playing: isPlaying });
-  }, [comp, playhead, isPlaying]);
+  }, [comp, playhead, isPlaying, frameTick]);
 
   // Playback loop.
   useEffect(() => {
@@ -50,12 +59,6 @@ export function PreviewCanvas() {
   }, [isPlaying, comp.duration]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={comp.width}
-      height={comp.height}
-      className="preview-canvas"
-      style={{ aspectRatio: `${comp.width} / ${comp.height}` }}
-    />
+    <canvas ref={canvasRef} width={comp.width} height={comp.height} className="preview-canvas" />
   );
 }

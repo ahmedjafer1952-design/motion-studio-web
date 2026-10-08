@@ -39,8 +39,17 @@ export function LibraryPanel({
   };
 
   const insertSound = async (id: Parameters<typeof getSoundUrl>[0]) => {
-    const url = await getSoundUrl(id);
-    addLayerWithProps("audio", { src: url, fileName: `${id}.wav`, trimIn: 0, naturalDuration: 1, muted: false }, 1.2);
+    const buffer = await getSoundUrl(id);
+    const naturalDuration = await new Promise<number>((resolve) => {
+      const probe = new Audio(buffer);
+      probe.onloadedmetadata = () => resolve(Number.isFinite(probe.duration) ? probe.duration : 1);
+      probe.onerror = () => resolve(1);
+    });
+    addLayerWithProps(
+      "audio",
+      { src: `sound:${id}`, fileName: `${id}.wav`, trimIn: 0, naturalDuration, muted: false },
+      naturalDuration
+    );
     flash(id);
   };
 
