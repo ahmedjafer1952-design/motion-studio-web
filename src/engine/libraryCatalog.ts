@@ -161,11 +161,16 @@ const TEMPLATE_SWATCH: Record<TemplateId, [string, string]> = {
   orbitingIcons: ["#ff8a65", "#1b1b1e"],
   statCard: ["#ffd166", "#1d1d22"],
   comparisonCard: ["#7cff8a", "#1d1d22"],
+  wordReveal: ["#ffd166", "#1b1b1e"],
+  markerHeadline: ["#ffd166", "#1b1b1e"],
+  statHero: ["#7cff8a", "#1b1b1e"],
+  barChartStory: ["#4f8cff", "#1b1b1e"],
+  brandReveal: ["#4f8cff", "#1b1b1e"],
 };
 
-const TEXT_IDS: TemplateId[] = ["titleCard", "lowerThird", "typewriterText", "highlightText"];
+const TEXT_IDS: TemplateId[] = ["wordReveal", "markerHeadline", "brandReveal", "titleCard", "lowerThird", "typewriterText", "highlightText"];
 const CAPSULE_IDS: TemplateId[] = ["badge", "ctaButton"];
-const LIST_IDS: TemplateId[] = ["bigNumber", "animatedList", "countUpNumber", "statCard", "comparisonCard"];
+const LIST_IDS: TemplateId[] = ["statHero", "barChartStory", "bigNumber", "animatedList", "countUpNumber", "statCard", "comparisonCard"];
 const MOTION_IDS: TemplateId[] = ["orbitingIcons"];
 
 function templateCards(ids: TemplateId[]): TemplateCard[] {
@@ -193,6 +198,7 @@ export const CAPTION_CARDS: CaptionCard[] = [
 ];
 
 export const ELEMENT_CARDS: ElementCard[] = [
+  { kind: "element", id: "chart", layerType: "chart", label: "رسم بياني متحرك", description: "أعمدة، دائري، شريط تقدم أو خط — الأرقام تعد وهي تطلع", swatch: ["#4f8cff", "#1b1b1e"] },
   { kind: "element", id: "glass", layerType: "glass", label: "لوحة زجاجية", description: "تمويه زجاجي حقيقي فوق الفيديو", swatch: ["#e4e4e8", "#28282d"] },
   { kind: "element", id: "rect", layerType: "rect", label: "مستطيل", description: "شكل مستطيل بسيط قابل للتحريك", swatch: ["#4f8cff", "#1b1b1e"] },
   { kind: "element", id: "ellipse", layerType: "ellipse", label: "دائرة", description: "شكل بيضاوي/دائري", swatch: ["#7cff8a", "#1b1b1e"] },

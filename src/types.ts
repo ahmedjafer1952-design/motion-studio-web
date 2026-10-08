@@ -1,4 +1,4 @@
-export type Easing = "linear" | "easeIn" | "easeOut" | "easeInOut";
+export type Easing = "linear" | "easeIn" | "easeOut" | "easeInOut" | "spring" | "backOut";
 
 export interface Point {
   x: number;
@@ -35,7 +35,8 @@ export type LayerType =
   | "audio"
   | "caption"
   | "glass"
-  | "overlay";
+  | "overlay"
+  | "chart";
 
 export interface TextLayerProps {
   content: string; // wrap a word in [brackets] to render it in emphasisColor
@@ -50,6 +51,8 @@ export interface TextLayerProps {
   countDuration?: number; // seconds the count-up takes
   glow?: string; // neon glow color around the text
   outline?: boolean; // draw only the letter outlines (big hollow numbers)
+  wordStagger?: number; // seconds between words springing in one after another (0/undefined = off)
+  highlightBar?: string; // color of a marker bar that wipes in behind the text
   stretchIn?: number; // seconds of Arabic kashida "stretch" that shrinks back as the text appears
 }
 
@@ -130,6 +133,22 @@ export interface GlassLayerProps {
   borderColor: string;
 }
 
+export type ChartKind = "bar" | "donut" | "progress" | "line";
+
+export interface ChartLayerProps {
+  kind: ChartKind;
+  values: number[]; // donut/progress use values[0] as a 0–100 percentage
+  labels: string[];
+  color: string;
+  secondaryColor?: string; // bars other than the tallest
+  trackColor: string;
+  suffix?: string; // e.g. "%" or "$"
+  revealDuration?: number; // seconds the grow/sweep takes
+  fontFamily: string;
+  width: number;
+  height: number;
+}
+
 export type OverlayEffect = "grain" | "vhs" | "vignette" | "scanlines";
 
 export interface OverlayLayerProps {
@@ -156,7 +175,8 @@ export interface Layer {
     | AudioLayerProps
     | CaptionLayerProps
     | GlassLayerProps
-    | OverlayLayerProps;
+    | OverlayLayerProps
+    | ChartLayerProps;
 }
 
 export type ColorGradeId =

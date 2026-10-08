@@ -9,6 +9,7 @@ import type {
   ImageLayerProps,
   Layer,
   OverlayLayerProps,
+  ChartLayerProps,
   PolygonLayerProps,
   Point,
   ShapeLayerProps,
@@ -26,7 +27,7 @@ import type { ModelSize, TranscribeProgress } from "../engine/transcribe";
 import { MOTION_PRESETS } from "../engine/presets";
 import { makeId } from "../utils/id";
 
-const EASINGS: Easing[] = ["linear", "easeIn", "easeOut", "easeInOut"];
+const EASINGS: Easing[] = ["linear", "easeIn", "easeOut", "easeInOut", "spring", "backOut"];
 
 function AnimRow({
   layerId,
@@ -232,6 +233,9 @@ export function PropertiesPanel() {
         {layer.type === "glass" && (
           <GlassFields props={layer.props as GlassLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
         )}
+        {layer.type === "chart" && (
+          <ChartFields props={layer.props as ChartLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
+        )}
         {layer.type === "overlay" && (
           <OverlayFields props={layer.props as OverlayLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
         )}
@@ -389,6 +393,54 @@ function TextFields({ props: p, onChange }: { props: TextLayerProps; onChange: (
             }}
           />
         </label>
+      )}
+      {!isCounter && (
+        <>
+          <div className="field-row">
+            <label className="field">
+              <span>Word-by-word (sec between words, 0 = off)</span>
+              <NumInput
+                min={0}
+                step={0.02}
+                value={p.wordStagger ?? 0}
+                onChange={(e) => {
+                  const v = Math.max(0, parseFloat(e.target.value) || 0);
+                  onChange({ wordStagger: v > 0 ? v : undefined });
+                }}
+              />
+            </label>
+            <label className="field">
+              <span>Letter stretch in (sec, 0 = off)</span>
+              <NumInput
+                min={0}
+                step={0.1}
+                value={p.stretchIn ?? 0}
+                onChange={(e) => {
+                  const v = Math.max(0, parseFloat(e.target.value) || 0);
+                  onChange({ stretchIn: v > 0 ? v : undefined });
+                }}
+              />
+            </label>
+          </div>
+          <div className="field-row">
+            <label className="field field-checkbox">
+              <input type="checkbox" checked={!!p.glow} onChange={(e) => onChange({ glow: e.target.checked ? p.color : undefined })} />
+              <span>Neon glow</span>
+            </label>
+            {p.glow && <input type="color" value={p.glow.startsWith("#") ? p.glow : "#5ab8ff"} onChange={(e) => onChange({ glow: e.target.value })} />}
+            <label className="field field-checkbox">
+              <input type="checkbox" checked={!!p.outline} onChange={(e) => onChange({ outline: e.target.checked || undefined })} />
+              <span>Outline only</span>
+            </label>
+          </div>
+          <div className="field-row">
+            <label className="field field-checkbox">
+              <input type="checkbox" checked={!!p.highlightBar} onChange={(e) => onChange({ highlightBar: e.target.checked ? "#ffd166" : undefined })} />
+              <span>Highlight bar behind</span>
+            </label>
+            {p.highlightBar && <input type="color" value={p.highlightBar} onChange={(e) => onChange({ highlightBar: e.target.value })} />}
+          </div>
+        </>
       )}
     </>
   );
@@ -908,6 +960,67 @@ function GlassFields({ props: p, onChange }: { props: GlassLayerProps; onChange:
       </div>
       <p className="hint">Blurs whatever is already drawn behind it (video, shapes…) — a real frosted-glass look.</p>
       <p className="hint">Rotation isn't supported on glass panels (position, scale and opacity still work).</p>
+    </>
+  );
+}
+
+function ChartFields({ props: p, onChange }: { props: ChartLayerProps; onChange: (p: Partial<ChartLayerProps>) => void }) {
+  const single = p.kind === "donut" || p.kind === "progress";
+  return (
+    <>
+      <label className="field">
+        <span>Chart type</span>
+        <select value={p.kind} onChange={(e) => onChange({ kind: e.target.value as ChartLayerProps["kind"] })}>
+          <option value="bar">Bars</option>
+          <option value="line">Line</option>
+          <option value="donut">Donut (percentage)</option>
+          <option value="progress">Progress bar (percentage)</option>
+        </select>
+      </label>
+      <label className="field">
+        <span>{single ? "Percentage (0–100)" : "Values, comma separated"}</span>
+        <input
+          defaultValue={single ? String(p.values[0] ?? 0) : p.values.join(", ")}
+          key={p.kind}
+          onBlur={(e) => {
+            const values = e.target.value.split(/[,،]/).map((v) => parseFloat(v)).filter((v) => Number.isFinite(v));
+            if (values.length) onChange({ values });
+          }}
+        />
+      </label>
+      <label className="field">
+        <span>{single ? "Label" : "Labels, comma separated"}</span>
+        <input
+          dir="auto"
+          defaultValue={p.labels.join("، ")}
+          onBlur={(e) => onChange({ labels: e.target.value.split(/[,،]/).map((v) => v.trim()) })}
+        />
+      </label>
+      <div className="field-row">
+        <label className="field">
+          <span>Color</span>
+          <input type="color" value={p.color} onChange={(e) => onChange({ color: e.target.value })} />
+        </label>
+        <label className="field">
+          <span>Suffix</span>
+          <input value={p.suffix ?? ""} onChange={(e) => onChange({ suffix: e.target.value })} />
+        </label>
+        <label className="field">
+          <span>Reveal (sec)</span>
+          <NumInput min={0.1} step={0.1} value={p.revealDuration ?? 1.2} onChange={(e) => onChange({ revealDuration: Math.max(0.1, parseFloat(e.target.value) || 1.2) })} />
+        </label>
+      </div>
+      <div className="field-row">
+        <label className="field">
+          <span>Width</span>
+          <NumInput min={50} value={p.width} onChange={(e) => onChange({ width: Math.max(50, parseFloat(e.target.value) || 50) })} />
+        </label>
+        <label className="field">
+          <span>Height</span>
+          <NumInput min={50} value={p.height} onChange={(e) => onChange({ height: Math.max(50, parseFloat(e.target.value) || 50) })} />
+        </label>
+      </div>
+      <FontSelect value={p.fontFamily} onChange={(fontFamily) => onChange({ fontFamily })} />
     </>
   );
 }

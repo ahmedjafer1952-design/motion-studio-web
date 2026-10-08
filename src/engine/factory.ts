@@ -4,6 +4,7 @@ import type {
   Layer,
   LayerType,
   OverlayLayerProps,
+  ChartLayerProps,
   Point,
   Project,
   ShapeLayerProps,
@@ -70,6 +71,20 @@ export function defaultProps(type: LayerType): Layer["props"] {
       };
     case "overlay":
       return { effect: "grain", intensity: 0.5, width: 1280, height: 720 } as OverlayLayerProps;
+    case "chart":
+      return {
+        kind: "bar",
+        values: [35, 60, 85, 50],
+        labels: ["يناير", "فبراير", "مارس", "أبريل"],
+        color: "#4f8cff",
+        secondaryColor: "#8fb4ff",
+        trackColor: "rgba(255,255,255,0.08)",
+        suffix: "%",
+        revealDuration: 1.2,
+        fontFamily: "'Cairo', sans-serif",
+        width: 560,
+        height: 380,
+      } as ChartLayerProps;
   }
 }
 

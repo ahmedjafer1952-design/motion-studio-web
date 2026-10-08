@@ -10,6 +10,13 @@ function easeFn(t: number, easing: Easing): number {
       return 1 - (1 - t) * (1 - t);
     case "easeInOut":
       return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    case "spring":
+      // Under-damped spring: overshoots, wobbles once or twice, settles exactly on the target.
+      return t >= 1 ? 1 : 1 - Math.exp(-6.5 * t) * Math.cos(13 * t);
+    case "backOut": {
+      const c = 1.70158;
+      return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2);
+    }
   }
 }
 

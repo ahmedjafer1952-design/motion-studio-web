@@ -67,7 +67,7 @@ export function elementPreview(layerType: LayerType, rawComp: Composition): Prev
     });
     return { layers: [layer, accent, backdrop], time: 0.6 };
   }
-  return { layers: [layer], time: 0.6 };
+  return { layers: [layer], time: layerType === "chart" ? 2 : 0.6 };
 }
 
 export function stickerPreview(id: StickerId, rawComp: Composition): PreviewScene {

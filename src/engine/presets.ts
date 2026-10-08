@@ -15,7 +15,13 @@ export type PresetId =
   | "whipPanLeft"
   | "whipPanRight"
   | "zoomPunch"
-  | "glitchCut";
+  | "glitchCut"
+  | "fadeUp"
+  | "springIn"
+  | "pulse"
+  | "shake"
+  | "scaleOut"
+  | "slideExitLeft";
 
 export interface PresetDef {
   id: PresetId;
@@ -37,6 +43,12 @@ export const MOTION_PRESETS: PresetDef[] = [
   { id: "whipPanLeft", label: "Whip Pan ←", description: "Fast cut-in from the right, like a quick camera swing" },
   { id: "whipPanRight", label: "Whip Pan →", description: "Fast cut-in from the left, like a quick camera swing" },
   { id: "zoomPunch", label: "Zoom Punch", description: "Snaps in from an over-zoomed cut, very fast" },
+  { id: "fadeUp", label: "Fade Up", description: "Rises a little while fading in — the most versatile entrance" },
+  { id: "springIn", label: "Spring In", description: "Grows in on a springy overshoot that settles" },
+  { id: "pulse", label: "Pulse", description: "A quick attention pulse just after it appears" },
+  { id: "shake", label: "Shake", description: "Shakes side to side to signal a mistake or a shock" },
+  { id: "scaleOut", label: "Scale Out", description: "Shrinks and fades away at the end" },
+  { id: "slideExitLeft", label: "Slide Out ←", description: "Slides out to the left at the end" },
   { id: "glitchCut", label: "Glitch Cut", description: "Jittery, flickery digital-glitch entrance" },
 ];
 
@@ -159,6 +171,52 @@ export function applyPresetToLayer(layer: Layer, presetId: PresetId, comp: Compo
         static: base.opacity,
         keyframes: [kf(start, 0.3, "linear"), kf(start + d * 0.5, base.opacity, "linear")],
       };
+      break;
+    }
+    case "fadeUp": {
+      const d = Math.min(0.5, dur * 0.4);
+      const low: Point = { x: base.position.x, y: base.position.y + comp.height * 0.03 };
+      clone.transform.position = { static: base.position, keyframes: [kf(start, low, "spring"), kf(start + d * 1.4, base.position, "spring")] };
+      clone.transform.opacity = { static: base.opacity, keyframes: [kf(start, 0, "easeOut"), kf(start + d, base.opacity, "easeOut")] };
+      break;
+    }
+    case "springIn": {
+      const d = Math.min(0.7, dur * 0.5);
+      const tiny: Point = { x: base.scale.x * 0.3, y: base.scale.y * 0.3 };
+      clone.transform.scale = { static: base.scale, keyframes: [kf(start, tiny, "spring"), kf(start + d, base.scale, "spring")] };
+      clone.transform.opacity = { static: base.opacity, keyframes: [kf(start, 0, "easeOut"), kf(start + 0.12, base.opacity, "easeOut")] };
+      break;
+    }
+    case "pulse": {
+      const t0 = start + Math.min(0.4, dur * 0.3);
+      const big: Point = { x: base.scale.x * 1.12, y: base.scale.y * 1.12 };
+      clone.transform.scale = {
+        static: base.scale,
+        keyframes: [kf(t0, base.scale, "easeOut"), kf(t0 + 0.12, big, "easeInOut"), kf(t0 + 0.3, base.scale, "easeInOut"), kf(t0 + 0.42, big, "easeInOut"), kf(t0 + 0.6, base.scale, "easeInOut")],
+      };
+      break;
+    }
+    case "shake": {
+      const a = Math.max(6, comp.width * 0.015);
+      const t0 = start + Math.min(0.3, dur * 0.2);
+      const offs = [0, -a, a, -a * 0.7, a * 0.7, -a * 0.35, 0];
+      clone.transform.position = {
+        static: base.position,
+        keyframes: offs.map((dx, i) => kf(t0 + i * 0.05, { x: base.position.x + dx, y: base.position.y }, "linear")),
+      };
+      break;
+    }
+    case "scaleOut": {
+      const d = Math.min(0.4, dur * 0.4);
+      const small: Point = { x: base.scale.x * 0.6, y: base.scale.y * 0.6 };
+      clone.transform.scale = { static: base.scale, keyframes: [kf(end - d, base.scale, "easeIn"), kf(end, small, "easeIn")] };
+      clone.transform.opacity = { static: base.opacity, keyframes: [kf(end - d, base.opacity, "easeIn"), kf(end, 0, "easeIn")] };
+      break;
+    }
+    case "slideExitLeft": {
+      const d = Math.min(0.45, dur * 0.4);
+      const off: Point = { x: base.position.x - comp.width * 0.7, y: base.position.y };
+      clone.transform.position = { static: base.position, keyframes: [kf(end - d, base.position, "easeIn"), kf(end, off, "easeIn")] };
       break;
     }
     case "glitchCut": {

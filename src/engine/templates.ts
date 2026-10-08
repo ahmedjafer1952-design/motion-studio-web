@@ -1,4 +1,5 @@
-import type { Composition, Keyframe, Layer, Point, TextLayerProps } from "../types";
+import type { ChartLayerProps, Composition, Keyframe, Layer, Point, TextLayerProps } from "../types";
+import { createLayer } from "./factory";
 import { makeImage, makeRect, makeText } from "./builders";
 import { applyPresetToLayer } from "./presets";
 import { makeId } from "../utils/id";
@@ -15,7 +16,12 @@ export type TemplateId =
   | "countUpNumber"
   | "orbitingIcons"
   | "statCard"
-  | "comparisonCard";
+  | "comparisonCard"
+  | "wordReveal"
+  | "markerHeadline"
+  | "statHero"
+  | "barChartStory"
+  | "brandReveal";
 
 export interface TemplateDef {
   id: TemplateId;
@@ -24,6 +30,11 @@ export interface TemplateDef {
 }
 
 export const MOTION_TEMPLATES: TemplateDef[] = [
+  { id: "wordReveal", label: "Word Reveal", description: "Words spring up one after another" },
+  { id: "markerHeadline", label: "Marker Headline", description: "A highlighter bar wipes in behind the key line" },
+  { id: "statHero", label: "Stat Hero", description: "Donut sweeps to a percentage with a headline" },
+  { id: "barChartStory", label: "Bar Chart", description: "Bars grow one by one with counting values" },
+  { id: "brandReveal", label: "Brand Reveal", description: "Name springs in, tagline rises, accent line draws" },
   { id: "titleCard", label: "Title Card", description: "Big heading + underline bar, slides and fades in" },
   { id: "lowerThird", label: "Lower Third", description: "Name / subtitle bar sliding in from the left" },
   { id: "badge", label: "Badge / Capsule", description: "Pill-shaped label that pops in" },
@@ -376,6 +387,62 @@ function comparisonCard(comp: Composition): Layer[] {
   return [rightLabel, rightNum, leftLabel, leftNum, divider, card];
 }
 
+const DISPLAY = "'Lalezar', 'Cairo', sans-serif";
+const unitOf = (comp: Composition) => Math.min(comp.width, comp.height);
+
+function wordReveal(comp: Composition): Layer[] {
+  const t = makeText(comp, { content: "كل كلمة [تطلع] بوقتها", fontSize: Math.round(unitOf(comp) * 0.09), color: "#ffffff", x: comp.width / 2, y: comp.height / 2, name: "Word Reveal", fontFamily: DISPLAY });
+  t.props = { ...(t.props as TextLayerProps), wordStagger: 0.12, emphasisColor: "#ffd166" };
+  return [applyPresetToLayer(t, "fadeOut", comp)];
+}
+
+function markerHeadline(comp: Composition): Layer[] {
+  const u = unitOf(comp);
+  const t = makeText(comp, { content: "أهم نقطة بالفيديو", fontSize: Math.round(u * 0.085), color: "#111111", x: comp.width / 2, y: comp.height / 2, name: "Marker Headline", fontFamily: DISPLAY });
+  t.props = { ...(t.props as TextLayerProps), highlightBar: "#ffd166" };
+  return [applyPresetToLayer(t, "fadeUp", comp)];
+}
+
+function chartLayer(comp: Composition, patch: Partial<ChartLayerProps>, x: number, y: number, name: string): Layer {
+  const layer = createLayer("chart", comp);
+  layer.name = name;
+  layer.props = { ...(layer.props as ChartLayerProps), ...patch };
+  layer.transform.position.static = { x, y };
+  return layer;
+}
+
+function statHero(comp: Composition): Layer[] {
+  const u = unitOf(comp);
+  const cx = comp.width / 2;
+  const donut = chartLayer(comp, { kind: "donut", values: [87], labels: ["نسبة النجاح"], width: u * 0.5, height: u * 0.5, color: "#7cff8a", revealDuration: 1.4 }, cx, comp.height * 0.48, "Stat Donut");
+  let head = makeText(comp, { content: "نتائج [حقيقية]", fontSize: Math.round(u * 0.08), color: "#ffffff", x: cx, y: comp.height * 0.48 - u * 0.36, name: "Stat Headline", fontFamily: DISPLAY });
+  head.props = { ...(head.props as TextLayerProps), wordStagger: 0.1, emphasisColor: "#7cff8a" };
+  head = applyPresetToLayer(head, "fadeOut", comp);
+  return [head, applyPresetToLayer(donut, "springIn", comp)];
+}
+
+function barChartStory(comp: Composition): Layer[] {
+  const u = unitOf(comp);
+  const chart = chartLayer(comp, { width: Math.min(comp.width * 0.85, u * 1.1), height: u * 0.6 }, comp.width / 2, comp.height * 0.55, "Bar Chart");
+  let head = makeText(comp, { content: "النمو خلال 4 شهور", fontSize: Math.round(u * 0.065), color: "#ffffff", x: comp.width / 2, y: comp.height * 0.55 - u * 0.42, name: "Chart Title", fontFamily: DISPLAY });
+  head = applyPresetToLayer(head, "fadeUp", comp);
+  return [head, chart];
+}
+
+function brandReveal(comp: Composition): Layer[] {
+  const u = unitOf(comp);
+  const cx = comp.width / 2;
+  const cy = comp.height / 2;
+  let name = makeText(comp, { content: "اسم البراند", fontSize: Math.round(u * 0.13), color: "#ffffff", x: cx, y: cy, name: "Brand Name", fontFamily: DISPLAY });
+  name.props = { ...(name.props as TextLayerProps), stretchIn: 0.8, glow: "rgba(79,140,255,0.8)" };
+  name = applyPresetToLayer(name, "springIn", comp);
+  let tag = makeText(comp, { content: "شعار قصير يوصف الخدمة", fontSize: Math.round(u * 0.045), color: "#c9c9d1", x: cx, y: cy + u * 0.12, startTime: 0.5, name: "Brand Tagline", fontFamily: "'Cairo', sans-serif" });
+  tag = applyPresetToLayer(tag, "fadeUp", comp);
+  let line = makeRect(comp, { width: u * 0.35, height: Math.max(4, u * 0.008), color: "#4f8cff", radius: 4, x: cx, y: cy + u * 0.075, startTime: 0.3, name: "Brand Accent Line" });
+  line.transform.scale = { static: { x: 1, y: 1 }, keyframes: [{ id: makeId("kf"), time: 0.3, value: { x: 0, y: 1 }, easing: "easeOut" }, { id: makeId("kf"), time: 0.8, value: { x: 1, y: 1 }, easing: "easeOut" }] };
+  return [name, tag, line];
+}
+
 export function buildTemplateLayers(templateId: TemplateId, comp: Composition): Layer[] {
   switch (templateId) {
     case "titleCard":
@@ -402,5 +469,15 @@ export function buildTemplateLayers(templateId: TemplateId, comp: Composition): 
       return statCard(comp);
     case "comparisonCard":
       return comparisonCard(comp);
+    case "wordReveal":
+      return wordReveal(comp);
+    case "markerHeadline":
+      return markerHeadline(comp);
+    case "statHero":
+      return statHero(comp);
+    case "barChartStory":
+      return barChartStory(comp);
+    case "brandReveal":
+      return brandReveal(comp);
   }
 }

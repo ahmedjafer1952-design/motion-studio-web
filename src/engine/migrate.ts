@@ -15,6 +15,7 @@ const LAYER_TYPES: LayerType[] = [
   "caption",
   "glass",
   "overlay",
+  "chart",
 ];
 
 export class InvalidProjectError extends Error {}
@@ -35,7 +36,7 @@ function animated<T>(raw: unknown, fallback: T, valid: (v: unknown) => v is T): 
             id: str(k.id, makeId("kf")),
             time: k.time as number,
             value: k.value as T,
-            easing: ["linear", "easeIn", "easeOut", "easeInOut"].includes(k.easing as string)
+            easing: ["linear", "easeIn", "easeOut", "easeInOut", "spring", "backOut"].includes(k.easing as string)
               ? (k.easing as Keyframe<T>["easing"])
               : "easeInOut",
           })

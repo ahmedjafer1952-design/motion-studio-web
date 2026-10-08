@@ -7,6 +7,7 @@ import type {
   Layer,
   ImageLayerProps,
   OverlayLayerProps,
+  ChartLayerProps,
   PolygonLayerProps,
   ShapeLayerProps,
   StarLayerProps,
@@ -14,6 +15,7 @@ import type {
   VideoLayerProps,
 } from "../types";
 import { evaluateTransform } from "./evaluate";
+import { drawChart } from "./chart";
 import { getColorGrade } from "./colorGrade";
 import { resolveMediaUrl } from "./mediaStore";
 
@@ -383,6 +385,32 @@ function kashidaStretch(text: string, count: number): string {
     .join(" ");
 }
 
+/** Words spring up one after another (right-to-left), each fading in as it rises. */
+function drawStaggeredWords(ctx: CanvasRenderingContext2D, p: TextLayerProps, content: string, localTime: number) {
+  const words = parseEmphasisWords(content);
+  if (words.length === 0) return;
+  ctx.direction = "rtl";
+  ctx.textAlign = "right";
+  const gap = p.fontSize * 0.28;
+  const widths = words.map((w) => ctx.measureText(w.text).width);
+  const total = widths.reduce((a, b) => a + b, 0) + gap * (words.length - 1);
+  let x = p.align === "left" ? total : p.align === "right" ? 0 : total / 2;
+  const stagger = p.wordStagger ?? 0.08;
+  words.forEach((w, i) => {
+    const k = Math.min(1, Math.max(0, (localTime - i * stagger) / 0.45));
+    if (k > 0) {
+      const spring = k >= 1 ? 1 : 1 - Math.exp(-6.5 * k) * Math.cos(13 * k);
+      ctx.save();
+      ctx.globalAlpha *= Math.min(1, k * 3);
+      ctx.translate(0, (1 - spring) * p.fontSize * 0.6);
+      ctx.fillStyle = w.emphasis ? p.emphasisColor ?? "#ffd166" : p.color;
+      ctx.fillText(w.text, x, 0);
+      ctx.restore();
+    }
+    x -= widths[i] + gap;
+  });
+}
+
 function drawText(ctx: CanvasRenderingContext2D, p: TextLayerProps, localTime: number) {
   ctx.font = `${p.bold ? "bold " : ""}${p.fontSize}px ${p.fontFamily}`;
   ctx.textBaseline = "middle";
@@ -415,6 +443,26 @@ function drawText(ctx: CanvasRenderingContext2D, p: TextLayerProps, localTime: n
     const maxChars = Math.max(0, Math.floor(Math.max(0, localTime) * p.revealSpeed));
     content = content.slice(0, maxChars);
     if (content.length === 0) return;
+  }
+
+  if (p.highlightBar) {
+    // Marker bar wiping in behind the text (right to left, Arabic reading direction).
+    const w = ctx.measureText(content.replace(/[[\]]/g, "")).width + p.fontSize * 0.5;
+    const k = Math.min(1, Math.max(0, localTime / 0.4));
+    const eased = 1 - (1 - k) * (1 - k);
+    const left = p.align === "left" ? -p.fontSize * 0.25 : p.align === "right" ? -w + p.fontSize * 0.25 : -w / 2;
+    ctx.save();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = p.highlightBar;
+    ctx.beginPath();
+    ctx.roundRect(left + w * (1 - eased), -p.fontSize * 0.62, w * eased, p.fontSize * 1.24, p.fontSize * 0.18);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  if (p.wordStagger && p.wordStagger > 0) {
+    drawStaggeredWords(ctx, p, content, localTime);
+    return;
   }
 
   if (p.stretchIn && p.stretchIn > 0 && localTime < p.stretchIn) {
@@ -739,6 +787,10 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
     }
     case "overlay": {
       drawOverlayEffect(ctx, layer.props as OverlayLayerProps);
+      break;
+    }
+    case "chart": {
+      drawChart(ctx, layer.props as ChartLayerProps, time - layer.startTime);
       break;
     }
   }
