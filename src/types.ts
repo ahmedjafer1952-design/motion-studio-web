@@ -48,6 +48,9 @@ export interface TextLayerProps {
   revealSpeed?: number; // chars/sec — types content on progressively, like a typewriter
   countTo?: number; // when set, content is replaced by a 0 → countTo counter
   countDuration?: number; // seconds the count-up takes
+  glow?: string; // neon glow color around the text
+  outline?: boolean; // draw only the letter outlines (big hollow numbers)
+  stretchIn?: number; // seconds of Arabic kashida "stretch" that shrinks back as the text appears
 }
 
 export interface ShapeLayerProps {
@@ -96,7 +99,7 @@ export interface AudioLayerProps {
   muted: boolean;
 }
 
-export type CaptionStyle = "bigWord" | "karaokeLine" | "pillWord" | "emphasisOnly" | "buildUp";
+export type CaptionStyle = "bigWord" | "karaokeLine" | "pillWord" | "emphasisOnly" | "buildUp" | "phraseStack";
 
 export interface CaptionWord {
   id: string;

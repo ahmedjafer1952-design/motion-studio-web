@@ -363,9 +363,41 @@ function drawEmphasisLine(ctx: CanvasRenderingContext2D, p: TextLayerProps, word
   }
 }
 
+// Letters that never join the following letter, so a kashida (ـ) can't follow them.
+const NON_JOINING = new Set("اأإآدذرزوؤةءى ".split(""));
+
+/** Inserts `count` kashidas into the middle of each Arabic word — the stretched-letter look. */
+function kashidaStretch(text: string, count: number): string {
+  if (count <= 0) return text;
+  return text
+    .split(" ")
+    .map((word) => {
+      if (word.length < 3 || !/[\u0600-\u06FF]/.test(word)) return word;
+      for (let i = Math.floor(word.length / 2) - 1; i >= 0; i--) {
+        if (!NON_JOINING.has(word[i]) && /[\u0621-\u064A]/.test(word[i]) && /[\u0621-\u064A]/.test(word[i + 1] ?? "")) {
+          return word.slice(0, i + 1) + "ـ".repeat(count) + word.slice(i + 1);
+        }
+      }
+      return word;
+    })
+    .join(" ");
+}
+
 function drawText(ctx: CanvasRenderingContext2D, p: TextLayerProps, localTime: number) {
   ctx.font = `${p.bold ? "bold " : ""}${p.fontSize}px ${p.fontFamily}`;
   ctx.textBaseline = "middle";
+  if (p.glow) {
+    ctx.shadowColor = p.glow;
+    ctx.shadowBlur = p.fontSize * 0.35;
+  }
+  if (p.outline) {
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth = Math.max(2, p.fontSize * 0.035);
+    ctx.textAlign = p.align;
+    ctx.strokeText(p.content, 0, 0);
+    if (p.glow) ctx.strokeText(p.content, 0, 0);
+    return;
+  }
 
   if (p.countTo != null) {
     const dur = Math.max(0.05, p.countDuration ?? 1.5);
@@ -385,6 +417,11 @@ function drawText(ctx: CanvasRenderingContext2D, p: TextLayerProps, localTime: n
     if (content.length === 0) return;
   }
 
+  if (p.stretchIn && p.stretchIn > 0 && localTime < p.stretchIn) {
+    const remaining = 1 - Math.max(0, localTime) / p.stretchIn;
+    content = kashidaStretch(content, Math.round(8 * remaining * remaining));
+  }
+
   if (content.includes("[")) {
     const words = parseEmphasisWords(content);
     if (words.length > 0) {
@@ -396,6 +433,47 @@ function drawText(ctx: CanvasRenderingContext2D, p: TextLayerProps, localTime: n
   ctx.fillStyle = p.color;
   ctx.textAlign = p.align;
   ctx.fillText(content, 0, 0);
+  if (p.glow) ctx.fillText(content, 0, 0); // second pass makes the neon read brighter
+}
+
+/**
+ * Pro talking-head captions: the current phrase in a big bold first line with the rest in
+ * smaller lines beneath, each word rising in as it's spoken; key words glow in the accent color.
+ */
+function drawPhraseStack(ctx: CanvasRenderingContext2D, p: CaptionLayerProps, t: number) {
+  const lines = groupCaptionWordsIntoLines(p.words, 0.45, 6);
+  const phrase = lines.find((l) => t >= l[0].start - 0.05 && t <= l[l.length - 1].end + 0.35);
+  if (!phrase) return;
+  const rows: CaptionWord[][] = [phrase.slice(0, 2)];
+  for (let i = 2; i < phrase.length; i += 3) rows.push(phrase.slice(i, i + 3));
+  let y = 0;
+  rows.forEach((row, r) => {
+    const size = r === 0 ? p.fontSize : p.fontSize * 0.62;
+    ctx.font = `bold ${size}px ${p.fontFamily}`;
+    const gap = size * 0.28;
+    const widths = row.map((w) => ctx.measureText(w.text).width);
+    const total = widths.reduce((a, b) => a + b, 0) + gap * (row.length - 1);
+    let x = total / 2;
+    ctx.textAlign = "right";
+    row.forEach((w, i) => {
+      const age = t - w.start;
+      if (age < -0.02) {
+        x -= widths[i] + gap;
+        return;
+      }
+      const k = Math.min(1, Math.max(0, age / 0.16));
+      ctx.save();
+      ctx.globalAlpha *= k;
+      ctx.translate(0, (1 - k) * size * 0.35);
+      ctx.shadowColor = w.emphasis ? p.emphasisColor : "rgba(0,0,0,0.6)";
+      ctx.shadowBlur = w.emphasis ? size * 0.35 : size * 0.18;
+      ctx.fillStyle = w.emphasis ? p.emphasisColor : p.color;
+      ctx.fillText(w.text, x, y);
+      ctx.restore();
+      x -= widths[i] + gap;
+    });
+    y += size * (r === 0 ? 0.95 : 1.15);
+  });
 }
 
 function drawCaption(ctx: CanvasRenderingContext2D, p: CaptionLayerProps, t: number) {
@@ -403,6 +481,11 @@ function drawCaption(ctx: CanvasRenderingContext2D, p: CaptionLayerProps, t: num
   ctx.direction = "rtl";
   ctx.textBaseline = "middle";
   ctx.font = `bold ${p.fontSize}px ${p.fontFamily}`;
+
+  if (p.style === "phraseStack") {
+    drawPhraseStack(ctx, p, t);
+    return;
+  }
 
   if (p.style === "bigWord") {
     const idx = t >= p.words[0].start ? findNearestPastWordIndex(p.words, t) : -1;

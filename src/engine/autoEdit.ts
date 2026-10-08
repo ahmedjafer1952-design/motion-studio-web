@@ -1,4 +1,4 @@
-import type { CaptionLayerProps, CaptionStyle, CaptionWord, ColorGradeId, Composition, Layer, TextLayerProps } from "../types";
+import type { GlassLayerProps, CaptionLayerProps, CaptionStyle, CaptionWord, ColorGradeId, Composition, Layer, TextLayerProps } from "../types";
 import type { SoundId } from "./sounds";
 import { createLayer } from "./factory";
 import { makeRect, makeText } from "./builders";
@@ -187,26 +187,47 @@ function analyzeSpeech(words: TranscribedWord[], pace: Pace): SpeechAnalysis {
 
 // --- Small, timed layer builders (local to Auto Edit) --------------------
 
+const DISPLAY_FONT = "'Lalezar', 'Cairo', sans-serif";
+const NEON = "#5ab8ff";
+const ACCENT_RED = "#ff3b3b";
+
+/** Hook title on a frosted-glass card, letters stretching (kashida) as it lands. */
 function titleCardAt(comp: Composition, text: string, start: number, end: number): Layer[] {
   const cx = comp.width / 2;
   const cy = comp.height * 0.4;
-  let title = makeText(comp, { content: text, fontSize: 68, color: "#ffffff", x: cx, y: cy, startTime: start, endTime: end, name: "Auto Title" });
-  let bar = makeRect(comp, { width: 240, height: 8, color: "#4f8cff", radius: 4, x: cx, y: cy + 54, startTime: Math.min(start + 0.15, end), endTime: end, name: "Auto Title Bar" });
-  title = applyPresetToLayer(applyPresetToLayer(title, "slideInTop", comp), "fadeIn", comp);
-  bar = applyPresetToLayer(bar, "fadeIn", comp);
-  return [title, bar];
+  const unit = Math.min(comp.width, comp.height);
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines = words.length > 2 ? [words.slice(0, Math.ceil(words.length / 2)).join(" "), words.slice(Math.ceil(words.length / 2)).join(" ")] : [text];
+  const fontSize = Math.round(unit * 0.085);
+  const card = createLayer("glass", comp);
+  card.name = "Auto Title Glass";
+  card.startTime = start;
+  card.endTime = end;
+  card.transform.position.static = { x: cx, y: cy };
+  card.props = {
+    width: Math.round(unit * 0.62),
+    height: Math.round(fontSize * (lines.length * 1.25 + 0.9)),
+    radius: Math.round(unit * 0.05),
+    blur: 22,
+    tint: "rgba(255,255,255,0.10)",
+    borderColor: "rgba(255,255,255,0.45)",
+  } as GlassLayerProps;
+  const out: Layer[] = [];
+  lines.forEach((line, i) => {
+    let t = makeText(comp, { content: line, fontSize, color: "#ffffff", x: cx, y: cy + (i - (lines.length - 1) / 2) * fontSize * 1.25, startTime: start, endTime: end, name: `Auto Title ${i + 1}`, fontFamily: DISPLAY_FONT });
+    t.props = { ...(t.props as TextLayerProps), stretchIn: 0.7 };
+    out.push(applyPresetToLayer(t, "fadeIn", comp));
+  });
+  return [...out, applyPresetToLayer(applyPresetToLayer(card, "popIn", comp), "fadeOut", comp)];
 }
 
+/** Tilted call-to-action in the top corner, like the "بالتعليقات" stamp in pro edits. */
 function ctaButtonAt(comp: Composition, text: string, start: number, end: number): Layer[] {
-  const w = 260;
-  const h = 68;
-  const x = comp.width / 2;
-  const y = comp.height * 0.85;
-  let pill = makeRect(comp, { width: w, height: h, color: "#4f8cff", radius: h / 2, x, y, startTime: start, endTime: end, name: "Auto CTA" });
-  let label = makeText(comp, { content: text, fontSize: 28, color: "#ffffff", x, y, startTime: start, endTime: end, name: "Auto CTA Text" });
-  pill = applyPresetToLayer(pill, "popIn", comp);
-  label = applyPresetToLayer(label, "popIn", comp);
-  return [label, pill];
+  const unit = Math.min(comp.width, comp.height);
+  let label = makeText(comp, { content: text, fontSize: Math.round(unit * 0.075), color: "#ffffff", x: comp.width * 0.27, y: comp.height * 0.1, startTime: start, endTime: end, name: "Auto CTA", fontFamily: DISPLAY_FONT });
+  label.transform.rotation.static = -40;
+  label.props = { ...(label.props as TextLayerProps), glow: "rgba(0,0,0,0.55)" };
+  return [applyPresetToLayer(label, "popIn", comp)];
 }
 
 // --- Edit plan --------------------------------------------------------------
@@ -235,7 +256,7 @@ export function planFromRules(words: TranscribedWord[], opts: AutoEditOptions): 
   return {
     words,
     emphasis: analysis.emphasisIndices,
-    captionStyle: "emphasisOnly",
+    captionStyle: "phraseStack",
     title: opts.title ?? null,
     numbers: analysis.numbers.map((n) => ({ text: n.text, label: "", time: n.time })),
     lists: analysis.lists,
@@ -287,11 +308,15 @@ export function buildEditFromPlan(
     style: plan.captionStyle,
     fontSize: Math.round(Math.min(comp.width, comp.height) * 0.072),
     color: "#ffffff",
-    emphasisColor: "#ffd166",
-    fontFamily: "'Cairo', sans-serif",
+    emphasisColor: plan.captionStyle === "phraseStack" ? ACCENT_RED : "#ffd166",
+    fontFamily: plan.captionStyle === "phraseStack" ? DISPLAY_FONT : "'Cairo', sans-serif",
     sourceTrimIn,
     sourceLayerName: sourceLayer.name,
   } as CaptionLayerProps;
+  if (plan.captionStyle === "phraseStack") {
+    captions.transform.position.static = { x: comp.width / 2, y: comp.height * (vertical ? 0.62 : 0.72) };
+    (captions.props as CaptionLayerProps).fontSize = Math.round(Math.min(comp.width, comp.height) * 0.085);
+  }
   newLayers.push(captions);
 
   if (plan.title) {
@@ -303,13 +328,16 @@ export function buildEditFromPlan(
     const t = toCompTime(n.time);
     if (!inClip(t, 0.3)) return;
     const end = Math.min(t + 2.2, sourceLayer.endTime);
-    const x = vertical ? comp.width / 2 : comp.width * 0.78;
-    const y = comp.height * 0.22;
-    let num = makeText(comp, { content: n.text, fontSize: Math.round(comp.height * 0.16), color: "#ffffff", x, y, startTime: t, endTime: end, name: `Auto Number ${idx + 1}`, fontFamily: "'Cairo', sans-serif" });
+    // Huge hollow neon number in the top corner, like a lit sign.
+    const x = vertical ? comp.width * 0.2 : comp.width * 0.78;
+    const y = comp.height * (vertical ? 0.17 : 0.24);
+    let num = makeText(comp, { content: n.text, fontSize: Math.round(comp.height * (n.text.length <= 2 ? 0.2 : 0.12)), color: "#ffffff", x, y, startTime: t, endTime: end, name: `Auto Number ${idx + 1}`, fontFamily: "'Cairo', sans-serif" });
+    num.props = { ...(num.props as TextLayerProps), outline: true, glow: "rgba(255,255,255,0.9)" };
     num = applyPresetToLayer(num, "popIn", comp);
     newLayers.push(num);
     if (n.label) {
-      let label = makeText(comp, { content: n.label, fontSize: Math.round(comp.height * 0.04), color: "#ffd166", x, y: y + comp.height * 0.11, startTime: Math.min(t + 0.15, end), endTime: end, name: `Auto Number Label ${idx + 1}`, fontFamily: "'Cairo', sans-serif" });
+      let label = makeText(comp, { content: n.label, fontSize: Math.round(Math.min(comp.width, comp.height) * 0.085), color: "#ffffff", x: vertical ? comp.width / 2 : x, y: vertical ? comp.height * 0.4 : y + comp.height * 0.11, startTime: Math.min(t + 0.15, end), endTime: end, name: `Auto Number Label ${idx + 1}`, fontFamily: DISPLAY_FONT });
+      label.props = { ...(label.props as TextLayerProps), stretchIn: 0.5, glow: "rgba(0,0,0,0.5)" };
       label = applyPresetToLayer(label, "fadeIn", comp);
       newLayers.push(label);
     }
@@ -353,7 +381,8 @@ export function buildEditFromPlan(
       name: `Auto Key Phrase ${idx + 1}`,
       fontFamily: "'Cairo', sans-serif",
     });
-    phrase.props = { ...(phrase.props as TextLayerProps), bold: true, emphasisColor: "#ffd166" };
+    // Neon sign look: glowing blue display type, the bracketed word in red.
+    phrase.props = { ...(phrase.props as TextLayerProps), fontFamily: DISPLAY_FONT, fontSize: Math.round(Math.min(comp.width, comp.height) * 0.11), color: NEON, glow: NEON, emphasisColor: "#9fdcff" };
     phrase = applyPresetToLayer(applyPresetToLayer(phrase, "popIn", comp), "fadeOut", comp);
     newLayers.push(phrase);
   });
@@ -387,10 +416,14 @@ export function buildEditFromPlan(
       const t = toCompTime(z.time);
       if (t <= sourceLayer.startTime + 0.2 || t >= sourceLayer.endTime - 0.5 || t - lastZoom < 0.8) return;
       lastZoom = t;
-      const k = z.strength === "strong" ? 1.12 : 1.06;
-      scaleKfs.push({ id: makeId("kf"), time: t - 0.08, value: baseScale, easing: "easeOut" });
-      scaleKfs.push({ id: makeId("kf"), time: t + 0.08, value: { x: baseScale.x * k, y: baseScale.y * k }, easing: "easeOut" });
-      scaleKfs.push({ id: makeId("kf"), time: t + 0.45, value: baseScale, easing: "easeInOut" });
+      // Punch in and hold, the way editors cut to a closer shot, then ease back out.
+      const k = z.strength === "strong" ? 1.18 : 1.08;
+      const hold = Math.min(1.6, Math.max(0.5, sourceLayer.endTime - t - 0.4));
+      scaleKfs.push({ id: makeId("kf"), time: t - 0.06, value: baseScale, easing: "easeOut" });
+      scaleKfs.push({ id: makeId("kf"), time: t + 0.1, value: { x: baseScale.x * k, y: baseScale.y * k }, easing: "linear" });
+      scaleKfs.push({ id: makeId("kf"), time: t + hold, value: { x: baseScale.x * k, y: baseScale.y * k }, easing: "easeInOut" });
+      scaleKfs.push({ id: makeId("kf"), time: t + hold + 0.3, value: baseScale, easing: "easeInOut" });
+      lastZoom = t + hold;
     });
   scaleKfs.sort((a, b) => a.time - b.time);
   updatedSourceLayer.transform.scale = { static: baseScale, keyframes: scaleKfs };

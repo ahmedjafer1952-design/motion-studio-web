@@ -188,6 +188,7 @@ export const CAPTION_CARDS: CaptionCard[] = [
   { kind: "caption", id: "karaokeLine", label: "كاريوكي", description: "السطر كامل، تمييز الكلمة أثناء النطق", swatch: ["#4f8cff", "#1b1b1e"] },
   { kind: "caption", id: "pillWord", label: "كبسولة زجاجية", description: "كلمة داخل خلفية زجاجية شفافة", swatch: ["#a78bfa", "#2a2a30"] },
   { kind: "caption", id: "emphasisOnly", label: "تمييز كلمة", description: "خط كامل، تمييز الكلمات المهمة فقط بالذهبي", swatch: ["#ffd166", "#1b1b1e"] },
+  { kind: "caption", id: "phraseStack", label: "احترافي متدرّج", description: "سطر عريض وتحته أسطر أصغر، الكلمات تطلع وحدة وحدة والمهمة تتوهج بالأحمر", swatch: ["#ff3b3b", "#1b1b1e"] },
   { kind: "caption", id: "buildUp", label: "تراكمي", description: "الكلمات تتجمع وتبقى ظاهرة أثناء الكلام", swatch: ["#7cff8a", "#1b1b1e"] },
 ];
 

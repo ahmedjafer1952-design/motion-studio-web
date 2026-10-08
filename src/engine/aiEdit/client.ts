@@ -5,7 +5,7 @@ import { COLOR_GRADES } from "../colorGrade";
 import type { TranscribedWord } from "../transcribe";
 import type { AiEditRequest, ClaudeEditOutput } from "./types";
 
-const CAPTION_STYLES: CaptionStyle[] = ["bigWord", "karaokeLine", "pillWord", "emphasisOnly", "buildUp"];
+const CAPTION_STYLES: CaptionStyle[] = ["bigWord", "karaokeLine", "pillWord", "emphasisOnly", "buildUp", "phraseStack"];
 const SOUND_IDS = new Set<string>(SOUND_LIBRARY.map((s) => s.id));
 const GRADE_IDS = new Set<string>(COLOR_GRADES.map((g) => g.id));
 
@@ -92,7 +92,7 @@ export function planFromClaude(words: TranscribedWord[], out: ClaudeEditOutput):
   return {
     words: corrected,
     emphasis: new Set(out.emphasis.filter(valid)),
-    captionStyle: CAPTION_STYLES.includes(style) ? style : "emphasisOnly",
+    captionStyle: CAPTION_STYLES.includes(style) ? style : "phraseStack",
     title: out.title?.trim() || null,
     numbers: out.numbers.filter((x) => valid(x.atWord) && x.value.trim()).map((x) => ({ text: x.value.trim(), label: x.label.trim(), time: at(x.atWord) })),
     lists: out.lists

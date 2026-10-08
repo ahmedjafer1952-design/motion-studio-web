@@ -823,6 +823,7 @@ function CaptionFields({
               <option value="pillWord">Pill / glass badge</option>
               <option value="emphasisOnly">Line + emphasis only</option>
               <option value="buildUp">Build-up (words accumulate as spoken)</option>
+              <option value="phraseStack">Phrase stack (pro talking-head)</option>
             </select>
           </label>
           <FontSelect value={p.fontFamily} onChange={(fontFamily) => onChange({ fontFamily })} />

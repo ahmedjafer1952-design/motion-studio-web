@@ -43,7 +43,7 @@ describe("planFromClaude", () => {
     });
     expect(plan.words[0].text).toBe("هلا");
     expect([...plan.emphasis]).toEqual([3]);
-    expect(plan.captionStyle).toBe("emphasisOnly");
+    expect(plan.captionStyle).toBe("phraseStack");
     expect(plan.zooms).toEqual([{ time: 1.4, strength: "light" }]);
     expect(plan.sounds).toEqual([{ sound: "pop", time: 1.4 }]);
     expect(plan.colorGrade).toBeNull();

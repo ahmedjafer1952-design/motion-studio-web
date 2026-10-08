@@ -19,7 +19,7 @@ const wordIndex = () => z.number().int().describe("Index of a word in the transc
 const ClaudeEditSchema = z.object({
   corrections: z.array(z.object({ index: wordIndex(), text: z.string() })),
   emphasis: z.array(wordIndex()),
-  captionStyle: z.string().describe("One of: bigWord, karaokeLine, pillWord, emphasisOnly, buildUp"),
+  captionStyle: z.string().describe("One of: bigWord, karaokeLine, pillWord, emphasisOnly, buildUp, phraseStack"),
   title: z.string().nullable(),
   numbers: z.array(z.object({ atWord: wordIndex(), value: z.string(), label: z.string() })),
   lists: z.array(z.object({ items: z.array(z.object({ atWord: wordIndex(), text: z.string() })) })),
