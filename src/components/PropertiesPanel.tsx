@@ -1151,8 +1151,8 @@ function BackgroundPicker({ value, onChange }: { value?: VideoBackground; onChan
   const keep = (bg: VideoBackground | undefined) => (bg ? { ...bg, quality: value?.quality, edge: value?.edge, lightWrap: value?.lightWrap } : undefined);
   const activeId = !value
     ? "none"
-    : value.kind === "image"
-      ? "image"
+    : value.kind === "image" || value.kind === "transparent"
+      ? value.kind
       : value.kind === "color"
         ? "color"
         : BG_PRESETS.find((b) => b.bg && b.bg.kind === value.kind && b.bg.color === value.color)?.id ?? "";
@@ -1174,8 +1174,19 @@ function BackgroundPicker({ value, onChange }: { value?: VideoBackground; onChan
           <span className="bg-swatch-color bg-swatch-icon">🖼</span>
           <span>صورة</span>
         </button>
+        <button type="button" className={`bg-swatch ${activeId === "transparent" ? "active" : ""}`} onClick={() => onChange(keep({ kind: "transparent" }))} title="الشخص بس — حط فيديو أو صورة كطبقة تحته">
+          <span className="bg-swatch-color bg-swatch-icon" style={{ background: "repeating-conic-gradient(#666 0 25%, #333 0 50%) 0 0/12px 12px" }}>🎬</span>
+          <span>فيديو تحته</span>
+        </button>
       </div>
       {value?.kind === "color" && <input type="color" value={value.color ?? "#000000"} onChange={(e) => onChange({ ...value, color: e.target.value })} />}
+      {value?.kind === "image" && (
+        <label className="field">
+          <span>عمق الصورة (ضبابية الخلفية مثل الكاميرا) — {value.amount ?? 0}</span>
+          <input type="range" min={0} max={16} value={value.amount ?? 0} onChange={(e) => onChange({ ...value, amount: Number(e.target.value) || undefined })} />
+        </label>
+      )}
+      {value?.kind === "transparent" && <p className="hint">هسه بس الشخص ينرسم. استورد فيديو أو صورة المكان، وخلّي طبقته تحت طبقة هذا الفيديو بالتايملاين (سهم ↓).</p>}
       {value?.kind === "blur" && (
         <label className="field">
           <span>قوة الضبابية</span>

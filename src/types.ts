@@ -105,11 +105,11 @@ export interface VideoLayerProps {
 
 /** A replacement background behind the (auto-segmented) person in a video layer. */
 export interface VideoBackground {
-  kind: "blur" | "color" | "studio" | "image";
+  kind: "blur" | "color" | "studio" | "image" | "transparent"; // transparent = person only, layers below show through
   color?: string; // color, or the studio light color
   color2?: string; // studio edge (darker) color
   src?: string; // image background ("idb:" ref)
-  amount?: number; // blur strength (px)
+  amount?: number; // blur strength (px); for images, a depth-of-field blur
   quality?: "fast" | "high"; // segmentation model: fast, or high-accuracy (hair/clothes)
   edge?: number; // -1 shrink … +1 grow the person's edge
   lightWrap?: boolean; // let the new background's light spill onto the edges (default on)

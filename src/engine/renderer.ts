@@ -759,6 +759,10 @@ function drawVideoBackground(ctx: CanvasRenderingContext2D, bg: VideoBackground,
   const x = -w / 2;
   const y = -h / 2;
   ctx.save();
+  if (bg.kind === "transparent") {
+    ctx.restore();
+    return;
+  }
   if (bg.kind === "blur") {
     // Overscan so the blur doesn't pull dark edges in from outside the frame.
     ctx.beginPath();
@@ -782,7 +786,18 @@ function drawVideoBackground(ctx: CanvasRenderingContext2D, bg: VideoBackground,
       const s = Math.max(w / img.naturalWidth, h / img.naturalHeight);
       const sw = w / s;
       const sh = h / s;
-      ctx.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, x, y, w, h);
+      // Optional depth-of-field blur: a sharp background behind a camera-focused speaker reads as fake.
+      if (bg.amount) {
+        ctx.beginPath();
+        ctx.rect(x, y, w, h);
+        ctx.clip();
+        ctx.filter = `blur(${bg.amount}px)`;
+        const ox = w * 0.04;
+        const oy = h * 0.04;
+        ctx.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, x - ox, y - oy, w + ox * 2, h + oy * 2);
+      } else {
+        ctx.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, x, y, w, h);
+      }
     } else {
       ctx.fillStyle = "#111111";
       ctx.fillRect(x, y, w, h);
