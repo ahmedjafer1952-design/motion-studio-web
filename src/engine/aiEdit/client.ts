@@ -83,17 +83,46 @@ export function planFromClaude(words: TranscribedWord[], out: ClaudeEditOutput):
   const valid = (i: number) => Number.isInteger(i) && i >= 0 && i < n;
   const at = (i: number) => words[Math.min(n - 1, Math.max(0, i))].start;
 
-  const corrected = words.map((w) => ({ ...w }));
+  const fixed = words.map((w) => ({ ...w }));
   for (const c of out.corrections) {
     const text = c.text.trim();
-    if (valid(c.index) && text && !/\s/.test(text)) corrected[c.index].text = text;
+    if (valid(c.index) && !/\s/.test(text)) fixed[c.index].text = text; // "" = drop the word
+  }
+  // Rewrites replace a garbled span with what was said, spreading the new words over its time.
+  const replaced = new Map<number, { from: number; to: number; text: string }>();
+  const covered = new Set<number>();
+  for (const r of [...(out.rewrites ?? [])].sort((a, b) => a.fromWord - b.fromWord)) {
+    if (!valid(r.fromWord) || !valid(r.toWord) || r.toWord < r.fromWord) continue;
+    let clash = false;
+    for (let i = r.fromWord; i <= r.toWord; i++) if (covered.has(i)) clash = true;
+    if (clash) continue;
+    for (let i = r.fromWord; i <= r.toWord; i++) covered.add(i);
+    replaced.set(r.fromWord, { from: r.fromWord, to: r.toWord, text: r.text.trim() });
+  }
+  const emphasisIn = new Set(out.emphasis.filter(valid));
+  const corrected: TranscribedWord[] = [];
+  const emphasis = new Set<number>();
+  for (let i = 0; i < n; i++) {
+    const r = replaced.get(i);
+    if (r) {
+      const parts = r.text.split(/\s+/).filter(Boolean);
+      const t0 = words[r.from].start;
+      const t1 = Math.max(words[r.to].end, t0 + 0.2 * parts.length);
+      const step = (t1 - t0) / Math.max(1, parts.length);
+      parts.forEach((text, k) => corrected.push({ text, start: t0 + k * step, end: t0 + (k + 1) * step - 0.02 }));
+      i = r.to;
+      continue;
+    }
+    if (covered.has(i) || !fixed[i].text.trim()) continue;
+    if (emphasisIn.has(i)) emphasis.add(corrected.length);
+    corrected.push(fixed[i]);
   }
 
   const style = out.captionStyle.trim() as CaptionStyle;
   const grade = out.colorGrade.trim();
   return {
     words: corrected,
-    emphasis: new Set(out.emphasis.filter(valid)),
+    emphasis,
     captionStyle: CAPTION_STYLES.includes(style) ? style : "phraseStack",
     title: out.title?.trim() || null,
     numbers: out.numbers.filter((x) => valid(x.atWord) && x.value.trim()).map((x) => ({ text: x.value.trim(), label: x.label.trim(), time: at(x.atWord) })),

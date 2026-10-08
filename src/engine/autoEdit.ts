@@ -188,10 +188,29 @@ function analyzeSpeech(words: TranscribedWord[], pace: Pace): SpeechAnalysis {
 // --- Small, timed layer builders (local to Auto Edit) --------------------
 
 // A user-uploaded Thmanyah Sans wins when present; otherwise the closest free match.
+/** Mixes a hex color toward white so a dark brand color still reads as a glowing neon. */
+function lighten(hex: string, amount: number): string {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return hex;
+  const mix = (c: string) => Math.round(parseInt(c, 16) + (255 - parseInt(c, 16)) * amount).toString(16).padStart(2, "0");
+  return `#${mix(m[1])}${mix(m[2])}${mix(m[3])}`;
+}
+
 function hexToRgba(hex: string, alpha: number): string {
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
   if (!m) return `rgba(20,184,166,${alpha})`;
   return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${alpha})`;
+}
+
+/** Rough on-screen width of bold Arabic display text (no canvas at build time). */
+function estTextWidth(text: string, fontSize: number): number {
+  return text.replace(/[[\]]/g, "").length * fontSize * 0.52;
+}
+
+/** Largest font size ≤ desired that keeps `text` within `maxWidth`. */
+function fitFont(text: string, desired: number, maxWidth: number): number {
+  const w = estTextWidth(text, desired);
+  return Math.max(12, Math.round(w > maxWidth ? desired * (maxWidth / w) : desired));
 }
 
 const DISPLAY_FONT = "'thmanyahsans', 'Alexandria', 'Cairo', sans-serif";
@@ -205,14 +224,16 @@ function titleCardAt(comp: Composition, text: string, start: number, end: number
   const unit = Math.min(comp.width, comp.height);
   const words = text.split(/\s+/).filter(Boolean);
   const lines = words.length > 2 ? [words.slice(0, Math.ceil(words.length / 2)).join(" "), words.slice(Math.ceil(words.length / 2)).join(" ")] : [text];
-  const fontSize = Math.round(unit * 0.085);
+  const longest = lines.reduce((a, b) => (b.length > a.length ? b : a), "");
+  const fontSize = fitFont(longest, Math.round(unit * 0.085), comp.width * 0.72);
+  const cardW = Math.min(comp.width * 0.9, estTextWidth(longest, fontSize) + fontSize * 1.6);
   const card = createLayer("glass", comp);
   card.name = "Auto Title Glass";
   card.startTime = start;
   card.endTime = end;
   card.transform.position.static = { x: cx, y: cy };
   card.props = {
-    width: Math.round(unit * 0.62),
+    width: Math.round(cardW),
     height: Math.round(fontSize * (lines.length * 1.25 + 0.9)),
     radius: Math.round(unit * 0.05),
     blur: 22,
@@ -222,8 +243,8 @@ function titleCardAt(comp: Composition, text: string, start: number, end: number
   const out: Layer[] = [];
   lines.forEach((line, i) => {
     let t = makeText(comp, { content: line, fontSize, color: "#ffffff", x: cx, y: cy + (i - (lines.length - 1) / 2) * fontSize * 1.25, startTime: start, endTime: end, name: `Auto Title ${i + 1}`, fontFamily: DISPLAY_FONT });
-    t.props = { ...(t.props as TextLayerProps), stretchIn: 0.7 };
-    out.push(applyPresetToLayer(t, "fadeIn", comp));
+    t.props = { ...(t.props as TextLayerProps), bold: true };
+    out.push(applyPresetToLayer(applyPresetToLayer(t, "fadeUp", comp), "fadeOut", comp));
   });
   return [...out, applyPresetToLayer(applyPresetToLayer(card, "popIn", comp), "fadeOut", comp)];
 }
@@ -231,8 +252,13 @@ function titleCardAt(comp: Composition, text: string, start: number, end: number
 /** Tilted call-to-action in the top corner, like the "بالتعليقات" stamp in pro edits. */
 function ctaButtonAt(comp: Composition, text: string, start: number, end: number): Layer[] {
   const unit = Math.min(comp.width, comp.height);
-  let label = makeText(comp, { content: text, fontSize: Math.round(unit * 0.075), color: "#ffffff", x: comp.width * 0.27, y: comp.height * 0.1, startTime: start, endTime: end, name: "Auto CTA", fontFamily: DISPLAY_FONT });
-  label.transform.rotation.static = -40;
+  // Tilted -35°: keep the rotated box fully inside the frame's top-left corner.
+  const fontSize = fitFont(text, Math.round(unit * 0.065), comp.width * 0.62);
+  const half = estTextWidth(text, fontSize) / 2;
+  const x = half * Math.cos((35 * Math.PI) / 180) + fontSize * 0.9;
+  const y = half * Math.sin((35 * Math.PI) / 180) + fontSize * 1.2;
+  let label = makeText(comp, { content: text, fontSize, color: "#ffffff", x, y, startTime: start, endTime: end, name: "Auto CTA", fontFamily: DISPLAY_FONT });
+  label.transform.rotation.static = -35;
   label.props = { ...(label.props as TextLayerProps), glow: "rgba(0,0,0,0.55)" };
   return [applyPresetToLayer(label, "popIn", comp)];
 }
@@ -331,7 +357,7 @@ export function buildEditFromPlan(
     sourceLayerName: sourceLayer.name,
   } as CaptionLayerProps;
   if (plan.captionStyle === "glassPill") {
-    captions.transform.position.static = { x: comp.width / 2, y: comp.height * (vertical ? 0.68 : 0.78) };
+    captions.transform.position.static = { x: comp.width / 2, y: comp.height * (vertical ? 0.75 : 0.8) };
     (captions.props as CaptionLayerProps).fontSize = Math.round(Math.min(comp.width, comp.height) * 0.065);
   }
   if (plan.captionStyle === "phraseStack") {
@@ -345,10 +371,25 @@ export function buildEditFromPlan(
   }
 
   // Big-number callouts, upper area so they don't collide with captions at the bottom.
+  // One "center stage" moment at a time: the title, each list, each number and key phrase get
+  // their own window; anything that would land on top of another is skipped rather than stacked.
+  const busy: [number, number][] = [];
+  const claim = (a: number, b: number) => {
+    if (busy.some(([x, y]) => a < y - 0.05 && b > x + 0.05)) return false;
+    busy.push([a, b]);
+    return true;
+  };
+  if (plan.title) claim(sourceLayer.startTime, sourceLayer.startTime + 2.5);
+  for (const list of plan.lists) {
+    const times = list.items.slice(0, 5).map((it) => toCompTime(it.time));
+    if (times.length) claim(Math.min(...times), Math.max(...times) + 2.5);
+  }
+
   plan.numbers.slice(0, 8).forEach((n, idx) => {
     const t = toCompTime(n.time);
     if (!inClip(t, 0.3)) return;
     const end = Math.min(t + 2.2, sourceLayer.endTime);
+    if (!claim(t, end)) return;
     // Huge hollow neon number in the top corner, like a lit sign.
     const x = vertical ? comp.width * 0.2 : comp.width * 0.78;
     const y = comp.height * (vertical ? 0.17 : 0.24);
@@ -357,7 +398,7 @@ export function buildEditFromPlan(
     num = applyPresetToLayer(num, "popIn", comp);
     newLayers.push(num);
     if (n.label) {
-      let label = makeText(comp, { content: n.label, fontSize: Math.round(Math.min(comp.width, comp.height) * 0.085), color: "#ffffff", x: vertical ? comp.width / 2 : x, y: vertical ? comp.height * 0.4 : y + comp.height * 0.11, startTime: Math.min(t + 0.15, end), endTime: end, name: `Auto Number Label ${idx + 1}`, fontFamily: DISPLAY_FONT });
+      let label = makeText(comp, { content: n.label, fontSize: Math.round(Math.min(comp.width, comp.height) * 0.085), color: "#ffffff", x: vertical ? comp.width / 2 : x, y: vertical ? comp.height * 0.52 : y + comp.height * 0.11, startTime: Math.min(t + 0.15, end), endTime: end, name: `Auto Number Label ${idx + 1}`, fontFamily: DISPLAY_FONT });
       label.props = { ...(label.props as TextLayerProps), stretchIn: 0.5, glow: "rgba(0,0,0,0.5)" };
       label = applyPresetToLayer(label, "fadeIn", comp);
       newLayers.push(label);
@@ -368,10 +409,11 @@ export function buildEditFromPlan(
   plan.lists.forEach((list, li) => {
     const unit = Math.min(comp.width, comp.height);
     const cardW = Math.min(comp.width * 0.82, unit * 0.8);
-    const cardH = unit * 0.12;
-    const gap = unit * 0.025;
+    const cardH = unit * 0.095;
+    const gap = unit * 0.018;
     const items = list.items.slice(0, 5);
-    const top = comp.height * (vertical ? 0.2 : 0.2);
+    // Below the face (portrait faces sit around 15–38% of the height), above the captions.
+    const top = comp.height * (vertical ? 0.43 : 0.2);
     // The stack clears 2.5 s after its last item, so later key moments aren't buried under it.
     const lastItem = items.length ? toCompTime(items[items.length - 1].time) : 0;
     const end = Math.min(sourceLayer.endTime, lastItem + 2.5);
@@ -387,7 +429,7 @@ export function buildEditFromPlan(
       card.props = { width: cardW, height: cardH, radius: cardH * 0.3, blur: 18, tint: hexToRgba(accent ?? "#14b8a6", 0.3), borderColor: "rgba(255,255,255,0.6)" } as GlassLayerProps;
       let entry = makeText(comp, {
         content: item.text,
-        fontSize: Math.round(cardH * 0.38),
+        fontSize: fitFont(item.text, Math.round(cardH * 0.4), cardW - cardH * 1.4),
         color: "#ffffff",
         align: "right",
         x: comp.width / 2 + cardW / 2 - cardH * 0.35,
@@ -411,13 +453,16 @@ export function buildEditFromPlan(
     if (!inClip(t, 0.3)) return;
     const unit = Math.min(comp.width, comp.height);
     const look = k.look ?? "neon";
-    const color = accent ?? NEON;
+    const color = accent ? lighten(accent, 0.45) : NEON;
+    if (!claim(t, Math.min(t + 2.4, sourceLayer.endTime))) return;
+    const text = look === "box" || look === "glass" ? k.text.replace(/[[\]]/g, "") : k.text;
+    const desired = Math.round(unit * (look === "glass" ? 0.065 : look === "box" ? 0.075 : 0.11));
     let phrase = makeText(comp, {
-      content: look === "box" || look === "glass" ? k.text.replace(/[[\]]/g, "") : k.text,
-      fontSize: Math.round(unit * (look === "glass" ? 0.065 : look === "box" ? 0.075 : 0.11)),
+      content: text,
+      fontSize: fitFont(text, desired, comp.width * (look === "stretch" ? 0.62 : 0.8)),
       color: look === "neon" ? color : "#ffffff",
       x: comp.width / 2,
-      y: comp.height * (vertical ? 0.42 : 0.45),
+      y: comp.height * (vertical ? 0.52 : 0.45),
       startTime: t,
       endTime: Math.min(t + 2.4, sourceLayer.endTime),
       name: `Auto Key Phrase ${idx + 1}`,
@@ -488,17 +533,21 @@ export function buildEditFromPlan(
     newLayers.push(applyPresetToLayer(applyPresetToLayer(slot, "fadeIn", comp), "fadeOut", comp));
   });
 
-  if ((plan.textBehind || plan.backgroundLook) && sourceLayer.type === "video") {
-    // Order (front → back): captions, lists, CTA, sounds · the person · titles, numbers, key phrases.
+  // A person cutout keeps the speaker in front of B-roll (so cutaways never cover the face), keeps
+  // them in color over a B&W/dim/blurred background, and — with "text behind" — in front of the text.
+  const hasBroll = newLayers.some((l) => l.name.startsWith("B-roll"));
+  if ((plan.textBehind || plan.backgroundLook || hasBroll) && sourceLayer.type === "video") {
+    const isBroll = (l: Layer) => l.name.startsWith("B-roll");
     const front = (l: Layer) => l.name === "Auto Captions" || l.name.startsWith("Auto List") || l.name.startsWith("Auto CTA") || l.type === "audio";
     const cutout = createLayer("cutout", comp);
-    cutout.name = "Auto Person (text behind)";
+    cutout.name = plan.textBehind ? "Auto Person (text behind)" : "Auto Person";
     cutout.startTime = sourceLayer.startTime;
     cutout.endTime = sourceLayer.endTime;
     cutout.props = { sourceLayerId: sourceLayer.id, feather: 2 };
-    // Without "text behind", the cutout just keeps the speaker in natural color over a B&W/dim/blurred
-    // background, so it sits at the very back of the new layers.
-    const reordered = plan.textBehind ? [...newLayers.filter(front), cutout, ...newLayers.filter((l) => !front(l))] : [...newLayers, cutout];
+    const fronts = newLayers.filter((l) => !isBroll(l) && front(l));
+    const middles = newLayers.filter((l) => !isBroll(l) && !front(l));
+    const brolls = newLayers.filter(isBroll);
+    const reordered = plan.textBehind ? [...fronts, cutout, ...middles, ...brolls] : [...fronts, ...middles, cutout, ...brolls];
     newLayers.length = 0;
     newLayers.push(...reordered);
   }

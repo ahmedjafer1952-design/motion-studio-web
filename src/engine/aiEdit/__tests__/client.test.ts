@@ -76,3 +76,21 @@ describe("edit prompt", () => {
     expect(msg).toContain("CTA: none");
   });
 });
+
+describe("planFromClaude rewrites", () => {
+  const w = (t: string, i: number) => ({ text: t, start: i, end: i + 0.5 });
+  const words = ["أكبر", "مشكلة", "ويعتبر", "هدس", "سيق", "المحاضرات"].map(w);
+  const empty = { corrections: [], emphasis: [], captionStyle: "glassPill", title: null, numbers: [], lists: [], keyPhrases: [], zooms: [], sounds: [], colorGrade: "none", cta: null, summary: "" };
+  it("replaces a garbled span, drops blanked words and keeps emphasis on the right word", () => {
+    const plan = planFromClaude(words, {
+      ...empty,
+      corrections: [{ index: 1, text: "" }],
+      rewrites: [{ fromWord: 2, toWord: 4, text: "وتضيع بين" }],
+      emphasis: [5, 3],
+    });
+    expect(plan.words.map((x) => x.text)).toEqual(["أكبر", "وتضيع", "بين", "المحاضرات"]);
+    expect(plan.words[1].start).toBe(2);
+    expect(plan.words[2].start).toBeCloseTo(3.25);
+    expect([...plan.emphasis]).toEqual([3]);
+  });
+});

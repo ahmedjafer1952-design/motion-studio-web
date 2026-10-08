@@ -17,6 +17,8 @@ export interface AiEditRequest {
 /** Claude's edit decisions, referencing transcript words by index so timing stays exact. */
 export interface ClaudeEditOutput {
   corrections: { index: number; text: string }[];
+  /** Garbled stretches re-written as what was actually said; the words are re-timed across the span. */
+  rewrites?: { fromWord: number; toWord: number; text: string }[];
   emphasis: number[];
   captionStyle: string; // validated against CaptionStyle when applied
   title: string | null;
