@@ -1,0 +1,49 @@
+import { COLOR_GRADES } from "../colorGrade";
+import { SOUND_LIBRARY } from "../sounds";
+import type { AiEditRequest } from "./types";
+
+export const EDIT_SYSTEM_PROMPT = `You are an experienced short-form video editor working for Arabic-speaking creators, many of whom speak Iraqi dialect. You receive a word-level speech transcript of a clip (machine transcribed, so it contains mistakes) and decide how to edit it inside a motion-graphics editor. Your decisions are applied automatically, so they must be precise.
+
+Every decision points at a transcript word by its index; the editor uses that word's timestamp. Only use indices that exist in the transcript.
+
+What to decide:
+- corrections: fix words the speech recognizer got wrong, one word per index (never merge or split words, never change the meaning). Write Iraqi or other dialect words the way they are spoken, not converted to Modern Standard Arabic. Leave correct words out of this list.
+- emphasis: the punchy content words worth highlighting in the captions — roughly one in eight to one in ten words, spread across the clip, never filler words.
+- captionStyle: the caption look that suits the content. bigWord = one big word at a time (energetic); karaokeLine = whole line, current word lit; pillWord = one word in a dark pill; emphasisOnly = whole line with only the emphasized words colored (calm, readable); buildUp = words accumulate as spoken.
+- title: a short hook (max 5 words) in the speaker's language shown at the start, or null if none was requested.
+- numbers: real quantities, prices, percentages or counts the speaker states, shown as a big number with a short label (e.g. value "500", label "عميل"). Skip incidental numbers.
+- lists: when the speaker enumerates points, one item per point, each at the word where that point starts, item text short (max 5 words).
+- keyPhrases: at most a few short punchlines (max 6 words) that deserve a full-screen moment. Wrap the single most important word in [square brackets] so it is highlighted.
+- zooms: camera punch-ins on strong moments (a key point, a reveal, a punchline). Density follows the pace: calm ≈ one every 8–10 s, medium ≈ every 5–6 s, strong ≈ every 3 s. Use "strong" sparingly.
+- sounds: sound effects, used with restraint (at most about one every 4 seconds; none is fine). Match the moment: whoosh/swoosh for transitions and list items, pop for numbers, ding/chime for key points, success at a satisfying ending, riser before a reveal, impact for a punchline.
+- colorGrade: a cinematic look that fits the mood, or "none" when the footage should stay natural.
+- cta: a short call to action (max 4 words) for the end, or null if none was requested.
+- summary: two or three sentences in Iraqi Arabic telling the creator what you did and why, in a friendly tone.
+
+All on-screen text (title, labels, list items, key phrases, CTA) must be in the speaker's language and dialect. Follow the creator's notes when they give any.`;
+
+const SOUND_IDS = SOUND_LIBRARY.map((s) => s.id).join(", ");
+const GRADE_IDS = COLOR_GRADES.map((g) => `${g.id} (${g.description})`).join("; ");
+
+function wish(label: string, wanted: { enabled: boolean; text: string }): string {
+  if (!wanted.enabled) return `${label}: none — return null.`;
+  if (wanted.text.trim()) return `${label}: use exactly "${wanted.text.trim()}".`;
+  return `${label}: write one that fits the content.`;
+}
+
+export function buildEditUserMessage(req: AiEditRequest): string {
+  const last = req.words[req.words.length - 1];
+  const orientation =
+    req.frame.height > req.frame.width ? "vertical" : req.frame.height === req.frame.width ? "square" : "horizontal";
+  const transcript = req.words.map((w, i) => `${i}|${w.start.toFixed(2)}|${w.text}`).join("\n");
+  const notes = req.instructions.trim();
+  return [
+    `Frame: ${req.frame.width}x${req.frame.height} (${orientation}). Clip length: ${(last?.end ?? 0).toFixed(1)} s. Pace: ${req.pace}.`,
+    wish("Title", req.title),
+    wish("CTA", req.cta),
+    `Available sounds: ${SOUND_IDS}.`,
+    `Available color grades: ${GRADE_IDS}.`,
+    notes ? `Creator's notes:\n<notes>\n${notes}\n</notes>` : "Creator's notes: none.",
+    `Transcript (index|start seconds|word):\n${transcript}`,
+  ].join("\n\n");
+}

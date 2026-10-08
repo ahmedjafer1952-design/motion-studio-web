@@ -114,3 +114,8 @@ export async function collectUnusedMedia(referencedText: string): Promise<number
     tx.onerror = () => reject(tx.error);
   });
 }
+
+/** Library sound effects aren't speech, so they're never offered as a captions / Auto Edit source. */
+export function isSpeechSource(src: string): boolean {
+  return !!src && !src.startsWith("sound:");
+}

@@ -1,4 +1,5 @@
-import type { CaptionLayerProps, CaptionWord, Composition, Layer } from "../types";
+import type { CaptionLayerProps, CaptionStyle, CaptionWord, ColorGradeId, Composition, Layer, TextLayerProps } from "../types";
+import type { SoundId } from "./sounds";
 import { createLayer } from "./factory";
 import { makeRect, makeText } from "./builders";
 import { applyPresetToLayer } from "./presets";
@@ -208,6 +209,44 @@ function ctaButtonAt(comp: Composition, text: string, start: number, end: number
   return [label, pill];
 }
 
+// --- Edit plan --------------------------------------------------------------
+// Whatever decides the edit (the built-in rules below, or Claude) produces an EditPlan in
+// source-clip seconds; buildEditFromPlan turns it into layers. Keeping the two apart means
+// both brains share exactly the same, tested layout code.
+
+export interface EditPlan {
+  /** Transcript to caption — may carry corrected wording, same timings. */
+  words: TranscribedWord[];
+  emphasis: Set<number>;
+  captionStyle: CaptionStyle;
+  title: string | null;
+  numbers: { text: string; label: string; time: number }[];
+  lists: { items: { text: string; time: number }[] }[];
+  /** Short on-screen punchlines; a [bracketed] word gets the highlight color. */
+  keyPhrases: { text: string; time: number }[];
+  zooms: { time: number; strength: "light" | "strong" }[];
+  sounds: { sound: SoundId; time: number }[];
+  colorGrade: ColorGradeId | null;
+  cta: string | null;
+}
+
+export function planFromRules(words: TranscribedWord[], opts: AutoEditOptions): EditPlan {
+  const analysis = analyzeSpeech(words, opts.pace);
+  return {
+    words,
+    emphasis: analysis.emphasisIndices,
+    captionStyle: "emphasisOnly",
+    title: opts.title ?? null,
+    numbers: analysis.numbers.map((n) => ({ text: n.text, label: "", time: n.time })),
+    lists: analysis.lists,
+    keyPhrases: [],
+    zooms: analysis.pausePoints.map((time) => ({ time, strength: "light" as const })),
+    sounds: [],
+    colorGrade: null,
+    cta: opts.cta ?? null,
+  };
+}
+
 // --- Assembly --------------------------------------------------------------
 
 export function buildAutoEdit(
@@ -217,17 +256,27 @@ export function buildAutoEdit(
   sourceTrimIn: number,
   opts: AutoEditOptions
 ): AutoEditResult {
-  const analysis = analyzeSpeech(words, opts.pace);
+  return buildEditFromPlan(comp, sourceLayer, sourceTrimIn, planFromRules(words, opts));
+}
+
+export function buildEditFromPlan(
+  comp: Composition,
+  sourceLayer: Layer,
+  sourceTrimIn: number,
+  plan: EditPlan
+): AutoEditResult {
   const newLayers: Layer[] = [];
   const toCompTime = (sourceTime: number) => sourceLayer.startTime + (sourceTime - sourceTrimIn);
+  const inClip = (t: number, tail = 0) => t >= sourceLayer.startTime && t <= sourceLayer.endTime - tail;
+  const vertical = comp.height > comp.width;
 
-  // Captions, spanning the full source clip, with heuristic emphasis highlighting.
-  const captionWords: CaptionWord[] = words.map((w, i) => ({
+  // Captions, spanning the full source clip.
+  const captionWords: CaptionWord[] = plan.words.map((w, i) => ({
     id: makeId("word"),
     text: w.text,
     start: w.start,
     end: w.end,
-    emphasis: analysis.emphasisIndices.has(i),
+    emphasis: plan.emphasis.has(i),
   }));
   const captions = createLayer("caption", comp);
   captions.name = "Auto Captions";
@@ -235,80 +284,120 @@ export function buildAutoEdit(
   captions.endTime = sourceLayer.endTime;
   captions.props = {
     words: captionWords,
-    style: "emphasisOnly",
-    fontSize: 52,
+    style: plan.captionStyle,
+    fontSize: Math.round(Math.min(comp.width, comp.height) * 0.072),
     color: "#ffffff",
     emphasisColor: "#ffd166",
-    fontFamily: "Arial, sans-serif",
+    fontFamily: "'Cairo', sans-serif",
     sourceTrimIn,
     sourceLayerName: sourceLayer.name,
   } as CaptionLayerProps;
   newLayers.push(captions);
 
-  if (opts.title) {
-    newLayers.push(...titleCardAt(comp, opts.title, sourceLayer.startTime, Math.min(sourceLayer.startTime + 2.5, sourceLayer.endTime)));
+  if (plan.title) {
+    newLayers.push(...titleCardAt(comp, plan.title, sourceLayer.startTime, Math.min(sourceLayer.startTime + 2.5, sourceLayer.endTime)));
   }
 
-  // Big-number callouts, top-right so they don't collide with captions at the bottom.
-  analysis.numbers.slice(0, 6).forEach((n, idx) => {
+  // Big-number callouts, upper area so they don't collide with captions at the bottom.
+  plan.numbers.slice(0, 8).forEach((n, idx) => {
     const t = toCompTime(n.time);
-    if (t < sourceLayer.startTime || t > sourceLayer.endTime - 0.3) return;
-    let num = makeText(comp, {
-      content: n.text,
-      fontSize: 120,
-      color: "#ffffff",
-      x: comp.width * 0.78,
-      y: comp.height * 0.22,
-      startTime: t,
-      endTime: Math.min(t + 1.8, sourceLayer.endTime),
-      name: `Auto Number ${idx + 1}`,
-    });
+    if (!inClip(t, 0.3)) return;
+    const end = Math.min(t + 2.2, sourceLayer.endTime);
+    const x = vertical ? comp.width / 2 : comp.width * 0.78;
+    const y = comp.height * 0.22;
+    let num = makeText(comp, { content: n.text, fontSize: Math.round(comp.height * 0.16), color: "#ffffff", x, y, startTime: t, endTime: end, name: `Auto Number ${idx + 1}`, fontFamily: "'Cairo', sans-serif" });
     num = applyPresetToLayer(num, "popIn", comp);
     newLayers.push(num);
+    if (n.label) {
+      let label = makeText(comp, { content: n.label, fontSize: Math.round(comp.height * 0.04), color: "#ffd166", x, y: y + comp.height * 0.11, startTime: Math.min(t + 0.15, end), endTime: end, name: `Auto Number Label ${idx + 1}`, fontFamily: "'Cairo', sans-serif" });
+      label = applyPresetToLayer(label, "fadeIn", comp);
+      newLayers.push(label);
+    }
   });
 
-  // Animated list items, each appearing exactly when its marker is spoken.
-  analysis.lists.forEach((list, li) => {
-    list.items.forEach((item, ii) => {
+  // Animated list items, each appearing exactly when it's spoken.
+  plan.lists.forEach((list, li) => {
+    const listEnd = sourceLayer.endTime;
+    list.items.slice(0, 6).forEach((item, ii) => {
       const t = toCompTime(item.time);
-      if (t < sourceLayer.startTime || t > sourceLayer.endTime) return;
+      if (!inClip(t)) return;
       let entry = makeText(comp, {
         content: `• ${item.text}`,
-        fontSize: 32,
+        fontSize: Math.round(Math.min(comp.width, comp.height) * 0.045),
         color: "#ffffff",
         align: "right",
-        x: comp.width * 0.7,
-        y: comp.height * 0.3 + ii * 64,
+        x: comp.width * (vertical ? 0.9 : 0.7),
+        y: comp.height * 0.3 + ii * Math.min(comp.width, comp.height) * 0.09,
         startTime: t,
-        endTime: sourceLayer.endTime,
+        endTime: listEnd,
         name: `Auto List ${li + 1}.${ii + 1}`,
+        fontFamily: "'Cairo', sans-serif",
       });
       entry = applyPresetToLayer(applyPresetToLayer(entry, "slideInRight", comp), "fadeIn", comp);
       newLayers.push(entry);
     });
   });
 
-  if (opts.cta) {
+  // Key phrases: short highlighted punchlines in the middle of the frame.
+  plan.keyPhrases.slice(0, 8).forEach((k, idx) => {
+    const t = toCompTime(k.time);
+    if (!inClip(t, 0.3)) return;
+    let phrase = makeText(comp, {
+      content: k.text,
+      fontSize: Math.round(Math.min(comp.width, comp.height) * 0.07),
+      color: "#ffffff",
+      x: comp.width / 2,
+      y: comp.height * (vertical ? 0.42 : 0.45),
+      startTime: t,
+      endTime: Math.min(t + 2.4, sourceLayer.endTime),
+      name: `Auto Key Phrase ${idx + 1}`,
+      fontFamily: "'Cairo', sans-serif",
+    });
+    phrase.props = { ...(phrase.props as TextLayerProps), bold: true, emphasisColor: "#ffd166" };
+    phrase = applyPresetToLayer(applyPresetToLayer(phrase, "popIn", comp), "fadeOut", comp);
+    newLayers.push(phrase);
+  });
+
+  // Sound effects at their moments, each spanning only its own length.
+  plan.sounds.slice(0, 20).forEach((s, idx) => {
+    const t = toCompTime(s.time);
+    if (!inClip(t)) return;
+    const layer = createLayer("audio", comp);
+    layer.name = `Auto Sound ${idx + 1} (${s.sound})`;
+    layer.startTime = t;
+    layer.endTime = Math.min(t + 1.3, Math.max(sourceLayer.endTime, t + 0.2));
+    layer.props = { src: `sound:${s.sound}`, fileName: `${s.sound}.wav`, trimIn: 0, naturalDuration: 1.3, muted: false };
+    newLayers.push(layer);
+  });
+
+  if (plan.cta) {
     const ctaStart = Math.max(sourceLayer.startTime, sourceLayer.endTime - 2.5);
-    newLayers.push(...ctaButtonAt(comp, opts.cta, ctaStart, sourceLayer.endTime));
+    newLayers.push(...ctaButtonAt(comp, plan.cta, ctaStart, sourceLayer.endTime));
   }
 
-  // Zoom "punches" on pauses, applied directly to the source layer's own scale.
+  // Zoom "punches", applied directly to the source layer's own scale.
   const updatedSourceLayer: Layer = JSON.parse(JSON.stringify(sourceLayer));
   const baseScale = updatedSourceLayer.transform.scale.static;
   const scaleKfs = [...updatedSourceLayer.transform.scale.keyframes];
-  analysis.pausePoints.slice(0, 14).forEach((pausePoint) => {
-    const t = toCompTime(pausePoint);
-    if (t <= sourceLayer.startTime + 0.2 || t >= sourceLayer.endTime - 0.2) return;
-    scaleKfs.push({ id: makeId("kf"), time: t - 0.08, value: baseScale, easing: "easeOut" });
-    scaleKfs.push({ id: makeId("kf"), time: t + 0.08, value: { x: baseScale.x * 1.06, y: baseScale.y * 1.06 }, easing: "easeOut" });
-    scaleKfs.push({ id: makeId("kf"), time: t + 0.4, value: baseScale, easing: "easeInOut" });
-  });
+  let lastZoom = -Infinity;
+  [...plan.zooms]
+    .sort((a, b) => a.time - b.time)
+    .slice(0, 24)
+    .forEach((z) => {
+      const t = toCompTime(z.time);
+      if (t <= sourceLayer.startTime + 0.2 || t >= sourceLayer.endTime - 0.5 || t - lastZoom < 0.8) return;
+      lastZoom = t;
+      const k = z.strength === "strong" ? 1.12 : 1.06;
+      scaleKfs.push({ id: makeId("kf"), time: t - 0.08, value: baseScale, easing: "easeOut" });
+      scaleKfs.push({ id: makeId("kf"), time: t + 0.08, value: { x: baseScale.x * k, y: baseScale.y * k }, easing: "easeOut" });
+      scaleKfs.push({ id: makeId("kf"), time: t + 0.45, value: baseScale, easing: "easeInOut" });
+    });
   scaleKfs.sort((a, b) => a.time - b.time);
   updatedSourceLayer.transform.scale = { static: baseScale, keyframes: scaleKfs };
 
   const compPatch: Partial<Composition> = {};
   if (sourceLayer.endTime > comp.duration) compPatch.duration = sourceLayer.endTime;
+  if (plan.colorGrade) compPatch.colorGrade = plan.colorGrade;
 
   return { newLayers, updatedSourceLayer, compPatch };
 }

@@ -17,7 +17,7 @@ import type {
   VideoLayerProps,
 } from "../types";
 import { useEditorStore, type AttachedAudio, type AttachedVideo } from "../state/store";
-import { resolveMediaUrl, storeMediaFile } from "../engine/mediaStore";
+import { isSpeechSource, resolveMediaUrl, storeMediaFile } from "../engine/mediaStore";
 import { FONT_CHOICES } from "../engine/fonts";
 import { evaluateTransform } from "../engine/evaluate";
 import { PROPERTY_COLORS } from "./Timeline/constants";
@@ -749,7 +749,7 @@ function CaptionFields({
 
   const sourceCandidates = layers.filter(
     (l): l is Layer & { props: VideoLayerProps | AudioLayerProps } =>
-      (l.type === "video" || l.type === "audio") && !!(l.props as VideoLayerProps | AudioLayerProps).src
+      (l.type === "video" || l.type === "audio") && isSpeechSource((l.props as VideoLayerProps | AudioLayerProps).src)
   );
 
   const [sourceId, setSourceId] = useState<string>(sourceCandidates[0]?.id ?? "");

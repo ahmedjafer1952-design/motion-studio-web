@@ -6,7 +6,7 @@ automatically. Layers, a keyframeable timeline, a canvas-based compositor,
 speech-to-text, and video export, all running client-side: no backend, no
 account, no upload.
 
-## Features (v0.9)
+## Features (v1.0)
 
 - **Layers**: text (incl. a typewriter reveal, `[bracket]` word-highlighting,
   and a 0→N count-up mode), rectangle, ellipse, polygon (3–12 sides), star,
@@ -62,7 +62,15 @@ account, no upload.
   inserts a ready-animated background plus a product-image placeholder (an
   empty image layer — swap in your own photo) with a smooth continuous
   bounce/float loop, picked from a grouped dropdown.
-- **✨ Auto Edit**: transcribes a video/audio layer's speech and
+- **✨ Auto Edit with Claude**: the clip's speech is transcribed in the
+  browser, then sent to Claude (`claude-opus-5-5`, structured output) which
+  edits like a human editor: fixes dialect words the recognizer got wrong
+  (keeping their timing), picks the caption style and emphasized words,
+  places big-number callouts, enumerated lists, highlighted punchlines,
+  zoom punches, sound effects, a color grade, title and CTA — following the
+  creator's free-text notes — and explains its choices in Iraqi Arabic. All
+  applied as one undo step. See "Connecting Claude" below.
+- **✨ Auto Edit (quick rules)**: transcribes a video/audio layer's speech and
   automatically assembles a first cut — captions with heuristically-detected
   emphasis, a big-number callout for anything counted, an animated list for
   anything enumerated (أولاً/ثانياً/ثالثاً…, each item appearing exactly when
@@ -128,6 +136,33 @@ npm run build    # production build to dist/
 npm run preview  # preview the production build
 ```
 
+## Connecting Claude (for ✨ Auto Edit with Claude)
+
+You need a Claude API key from https://console.anthropic.com (API Keys). Each
+edit is one request to `claude-opus-5-5`; a typical 1–3 minute clip costs a
+few US cents.
+
+**Option A — key on the server (recommended, the key never reaches the browser)**
+
+1. Copy `.env.example` to `.env.local` and set `ANTHROPIC_API_KEY=sk-ant-…`.
+2. Restart `npm run dev`. The dev server answers `POST /api/ai-edit`.
+3. When hosting on Netlify, set `ANTHROPIC_API_KEY` in the site's
+   environment variables; `netlify/functions/ai-edit.mts` serves the same
+   endpoint. On a public site also set `AI_ACCESS_CODE`, and enter that code
+   in Auto Edit → 🔑 Claude connection, so strangers can't spend your credit.
+   Note that serverless functions have execution time limits; very long
+   clips may need a host that allows longer requests.
+
+**Option B — personal key in the browser**
+
+Paste a key in Auto Edit → 🔑 Claude connection. It's stored only in that
+browser and sent directly to Anthropic. Handy for a single user; don't use it
+on shared computers.
+
+The request uses server-side refusal fallbacks (`fallbacks: "default"`), so
+if Claude's safety checks decline a clip, Anthropic retries it on its
+recommended fallback model automatically.
+
 ## Architecture
 
 ```
@@ -153,8 +188,11 @@ src/
                                # scenes and Auto Edit (makeText/makeRect/…)
     scenes.ts                  # faceless scenes — full background + product
                                 # placeholder compositions, 6 types × 4 colors
-    autoEdit.ts                 # rule-based speech analysis (lists, numbers,
-                                 # emphasis, pauses) + assembles a first cut
+    autoEdit.ts                 # EditPlan type, rule-based planner, and the
+                                 # builder that turns any plan into layers
+    aiEdit/                      # Claude Auto Edit: prompt, structured-output
+                                  # schema + API call (claude.ts), browser client
+                                  # and plan conversion (client.ts)
     libraryPreview.ts            # builds the sample layers each library
                                   # card previews, per category
     stickers.ts                   # 8 animated emoji stickers + orbiting-icon
@@ -165,6 +203,7 @@ src/
                                      # OfflineAudioContext → WAV blob, cached)
     mediaStore.ts                    # persists imported media in IndexedDB;
                                       # resolves idb:/sound: refs to URLs
+  netlify/functions/ai-edit.mts  # (repo root) production /api/ai-edit endpoint
   state/
     store.ts            # Zustand store: project state, undo/redo, actions
   components/

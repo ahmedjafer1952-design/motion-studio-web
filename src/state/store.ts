@@ -15,7 +15,7 @@ import { evaluateTransform } from "../engine/evaluate";
 import { applyPresetToLayer, type PresetId } from "../engine/presets";
 import { buildTemplateLayers, type TemplateId } from "../engine/templates";
 import { buildScene, type SceneId } from "../engine/scenes";
-import { buildAutoEdit, type AutoEditOptions } from "../engine/autoEdit";
+import { buildEditFromPlan, planFromRules, type AutoEditOptions, type EditPlan } from "../engine/autoEdit";
 import type { TranscribedWord } from "../engine/transcribe";
 import { buildSticker, type StickerId } from "../engine/stickers";
 import { makeId } from "../utils/id";
@@ -66,6 +66,8 @@ interface EditorState {
   attachVideo: (layerId: string, media: AttachedVideo) => void;
   attachAudio: (layerId: string, media: AttachedAudio) => void;
   applyAutoEdit: (sourceLayerId: string, words: TranscribedWord[], opts: AutoEditOptions) => void;
+  /** Applies an edit plan (from the built-in rules or from Claude) as one undo step. */
+  applyEditPlan: (sourceLayerId: string, plan: EditPlan) => void;
 
   setPlayhead: (time: number) => void;
   play: () => void;
@@ -420,12 +422,14 @@ export const useEditorStore = create<EditorState>((set, get) => {
       });
     },
 
-    applyAutoEdit: (sourceLayerId, words, opts) => {
+    applyAutoEdit: (sourceLayerId, words, opts) => get().applyEditPlan(sourceLayerId, planFromRules(words, opts)),
+
+    applyEditPlan: (sourceLayerId, plan) => {
       const comp = get().project.composition;
       const sourceLayer = comp.layers.find((l) => l.id === sourceLayerId);
       if (!sourceLayer) return;
       const srcProps = sourceLayer.props as { trimIn: number };
-      const { newLayers, updatedSourceLayer, compPatch } = buildAutoEdit(comp, sourceLayer, words, srcProps.trimIn, opts);
+      const { newLayers, updatedSourceLayer, compPatch } = buildEditFromPlan(comp, sourceLayer, srcProps.trimIn, plan);
       commit(
         (p) => ({
           ...p,
