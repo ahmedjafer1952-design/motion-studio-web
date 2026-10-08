@@ -24,7 +24,7 @@ export interface LayerTransform {
   opacity: AnimatedProperty<number>; // 0..1
 }
 
-export type LayerType = "text" | "rect" | "ellipse" | "image" | "video";
+export type LayerType = "text" | "rect" | "ellipse" | "polygon" | "star" | "image" | "video" | "audio";
 
 export interface TextLayerProps {
   content: string;
@@ -39,6 +39,21 @@ export interface ShapeLayerProps {
   height: number;
   color: string;
   radius?: number; // rect corner radius
+}
+
+export interface PolygonLayerProps {
+  width: number;
+  height: number;
+  color: string;
+  sides: number; // 3..12
+}
+
+export interface StarLayerProps {
+  width: number;
+  height: number;
+  color: string;
+  points: number; // 3..12
+  innerRatio: number; // 0..1, inner radius as a fraction of outer radius
 }
 
 export interface ImageLayerProps {
@@ -57,6 +72,14 @@ export interface VideoLayerProps {
   muted: boolean;
 }
 
+export interface AudioLayerProps {
+  src: string; // object URL (session-only — not persisted across reloads)
+  fileName: string;
+  trimIn: number; // seconds into the source audio where playback starts
+  naturalDuration: number; // source audio's own duration, seconds
+  muted: boolean;
+}
+
 export interface Layer {
   id: string;
   name: string;
@@ -64,7 +87,14 @@ export interface Layer {
   startTime: number; // seconds
   endTime: number; // seconds
   transform: LayerTransform;
-  props: TextLayerProps | ShapeLayerProps | ImageLayerProps | VideoLayerProps;
+  props:
+    | TextLayerProps
+    | ShapeLayerProps
+    | PolygonLayerProps
+    | StarLayerProps
+    | ImageLayerProps
+    | VideoLayerProps
+    | AudioLayerProps;
 }
 
 export interface Composition {

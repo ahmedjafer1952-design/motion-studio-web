@@ -13,8 +13,12 @@ import { createDefaultProject, createLayer } from "../engine/factory";
 import { evaluateTransform } from "../engine/evaluate";
 import { makeId } from "../utils/id";
 
+const MAX_HISTORY = 100;
+
 interface EditorState {
   project: Project;
+  past: Project[];
+  future: Project[];
   selectedLayerId: string | null;
   playhead: number; // seconds
   isPlaying: boolean;
@@ -23,6 +27,9 @@ interface EditorState {
 
   newProject: () => void;
   loadProject: (project: Project) => void;
+
+  undo: () => void;
+  redo: () => void;
 
   updateComposition: (patch: Partial<Composition>) => void;
 
@@ -63,86 +70,123 @@ function mapLayers(comp: Composition, layerId: string, fn: (l: Layer) => Layer):
   };
 }
 
-export const useEditorStore = create<EditorState>((set, get) => ({
-  project: createDefaultProject(),
-  selectedLayerId: null,
-  playhead: 0,
-  isPlaying: false,
-  isExporting: false,
-  exportProgress: 0,
+export const useEditorStore = create<EditorState>((set, get) => {
+  /** Applies a pure transform to the current project, pushing the previous project onto the undo stack. */
+  function commit(updater: (project: Project) => Project, extraPatch?: Partial<EditorState>) {
+    const prevProject = get().project;
+    const nextProject = updater(prevProject);
+    if (nextProject === prevProject && !extraPatch) return;
+    set((s) => ({
+      project: nextProject,
+      past: [...s.past, prevProject].slice(-MAX_HISTORY),
+      future: [],
+      ...extraPatch,
+    }));
+  }
 
-  newProject: () => set({ project: createDefaultProject(), selectedLayerId: null, playhead: 0, isPlaying: false }),
+  return {
+    project: createDefaultProject(),
+    past: [],
+    future: [],
+    selectedLayerId: null,
+    playhead: 0,
+    isPlaying: false,
+    isExporting: false,
+    exportProgress: 0,
 
-  loadProject: (project) => set({ project, selectedLayerId: null, playhead: 0, isPlaying: false }),
+    newProject: () =>
+      set({
+        project: createDefaultProject(),
+        past: [],
+        future: [],
+        selectedLayerId: null,
+        playhead: 0,
+        isPlaying: false,
+      }),
 
-  updateComposition: (patch) =>
-    set((s) => ({ project: { ...s.project, composition: { ...s.project.composition, ...patch } } })),
+    loadProject: (project) =>
+      set({ project, past: [], future: [], selectedLayerId: null, playhead: 0, isPlaying: false }),
 
-  addLayer: (type) =>
-    set((s) => {
-      const layer = createLayer(type, s.project.composition);
-      const comp = { ...s.project.composition, layers: [layer, ...s.project.composition.layers] };
-      return { project: { ...s.project, composition: comp }, selectedLayerId: layer.id };
-    }),
+    undo: () => {
+      const { past, future, project } = get();
+      if (past.length === 0) return;
+      const prev = past[past.length - 1];
+      set({ project: prev, past: past.slice(0, -1), future: [project, ...future] });
+    },
 
-  removeLayer: (layerId) =>
-    set((s) => {
-      const comp = { ...s.project.composition, layers: s.project.composition.layers.filter((l) => l.id !== layerId) };
+    redo: () => {
+      const { past, future, project } = get();
+      if (future.length === 0) return;
+      const next = future[0];
+      set({ project: next, past: [...past, project], future: future.slice(1) });
+    },
+
+    updateComposition: (patch) =>
+      commit((p) => ({ ...p, composition: { ...p.composition, ...patch } })),
+
+    addLayer: (type) => {
+      const layer = createLayer(type, get().project.composition);
+      commit(
+        (p) => ({ ...p, composition: { ...p.composition, layers: [layer, ...p.composition.layers] } }),
+        { selectedLayerId: layer.id }
+      );
+    },
+
+    removeLayer: (layerId) => {
       const selected = get().selectedLayerId === layerId ? null : get().selectedLayerId;
-      return { project: { ...s.project, composition: comp }, selectedLayerId: selected };
-    }),
+      commit(
+        (p) => ({
+          ...p,
+          composition: { ...p.composition, layers: p.composition.layers.filter((l) => l.id !== layerId) },
+        }),
+        { selectedLayerId: selected }
+      );
+    },
 
-  selectLayer: (layerId) => set({ selectedLayerId: layerId }),
+    selectLayer: (layerId) => set({ selectedLayerId: layerId }),
 
-  renameLayer: (layerId, name) =>
-    set((s) => ({
-      project: { ...s.project, composition: mapLayers(s.project.composition, layerId, (l) => ({ ...l, name })) },
-    })),
+    renameLayer: (layerId, name) =>
+      commit((p) => ({ ...p, composition: mapLayers(p.composition, layerId, (l) => ({ ...l, name })) })),
 
-  updateLayerProps: (layerId, patch) =>
-    set((s) => ({
-      project: {
-        ...s.project,
-        composition: mapLayers(s.project.composition, layerId, (l) => ({
+    updateLayerProps: (layerId, patch) =>
+      commit((p) => ({
+        ...p,
+        composition: mapLayers(p.composition, layerId, (l) => ({
           ...l,
           props: { ...l.props, ...patch } as Layer["props"],
         })),
-      },
-    })),
+      })),
 
-  updateLayerTiming: (layerId, startTime, endTime) =>
-    set((s) => ({
-      project: {
-        ...s.project,
-        composition: mapLayers(s.project.composition, layerId, (l) => ({ ...l, startTime, endTime })),
-      },
-    })),
+    updateLayerTiming: (layerId, startTime, endTime) =>
+      commit((p) => ({
+        ...p,
+        composition: mapLayers(p.composition, layerId, (l) => ({ ...l, startTime, endTime })),
+      })),
 
-  moveLayer: (layerId, direction) =>
-    set((s) => {
-      const layers = [...s.project.composition.layers];
-      const idx = layers.findIndex((l) => l.id === layerId);
-      if (idx === -1) return {};
-      const swapWith = direction === "up" ? idx - 1 : idx + 1;
-      if (swapWith < 0 || swapWith >= layers.length) return {};
-      [layers[idx], layers[swapWith]] = [layers[swapWith], layers[idx]];
-      return { project: { ...s.project, composition: { ...s.project.composition, layers } } };
-    }),
+    moveLayer: (layerId, direction) =>
+      commit((p) => {
+        const layers = [...p.composition.layers];
+        const idx = layers.findIndex((l) => l.id === layerId);
+        if (idx === -1) return p;
+        const swapWith = direction === "up" ? idx - 1 : idx + 1;
+        if (swapWith < 0 || swapWith >= layers.length) return p;
+        [layers[idx], layers[swapWith]] = [layers[swapWith], layers[idx]];
+        return { ...p, composition: { ...p.composition, layers } };
+      }),
 
-  setPlayhead: (time) =>
-    set((s) => ({ playhead: Math.max(0, Math.min(s.project.composition.duration, time)) })),
+    setPlayhead: (time) =>
+      set((s) => ({ playhead: Math.max(0, Math.min(s.project.composition.duration, time)) })),
 
-  play: () => set({ isPlaying: true }),
-  pause: () => set({ isPlaying: false }),
-  togglePlay: () => set((s) => ({ isPlaying: !s.isPlaying })),
+    play: () => set({ isPlaying: true }),
+    pause: () => set({ isPlaying: false }),
+    togglePlay: () => set((s) => ({ isPlaying: !s.isPlaying })),
 
-  addKeyframe: (layerId, propKey, value) =>
-    set((s) => {
-      const time = get().playhead;
-      return {
-        project: {
-          ...s.project,
-          composition: mapLayers(s.project.composition, layerId, (l) => {
+    addKeyframe: (layerId, propKey, value) =>
+      commit((p) => {
+        const time = get().playhead;
+        return {
+          ...p,
+          composition: mapLayers(p.composition, layerId, (l) => {
             const layer = cloneLayer(l);
             const animProp = layer.transform[propKey] as { static: unknown; keyframes: Keyframe<unknown>[] };
             const current =
@@ -164,28 +208,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             animProp.keyframes.sort((a, b) => a.time - b.time);
             return layer;
           }),
-        },
-      };
-    }),
+        };
+      }),
 
-  removeKeyframe: (layerId, propKey, keyframeId) =>
-    set((s) => ({
-      project: {
-        ...s.project,
-        composition: mapLayers(s.project.composition, layerId, (l) => {
+    removeKeyframe: (layerId, propKey, keyframeId) =>
+      commit((p) => ({
+        ...p,
+        composition: mapLayers(p.composition, layerId, (l) => {
           const layer = cloneLayer(l);
           const animProp = layer.transform[propKey] as { keyframes: Keyframe<unknown>[] };
           animProp.keyframes = animProp.keyframes.filter((k) => k.id !== keyframeId);
           return layer;
         }),
-      },
-    })),
+      })),
 
-  updateKeyframe: (layerId, propKey, keyframeId, patch) =>
-    set((s) => ({
-      project: {
-        ...s.project,
-        composition: mapLayers(s.project.composition, layerId, (l) => {
+    updateKeyframe: (layerId, propKey, keyframeId, patch) =>
+      commit((p) => ({
+        ...p,
+        composition: mapLayers(p.composition, layerId, (l) => {
           const layer = cloneLayer(l);
           const animProp = layer.transform[propKey] as { keyframes: Keyframe<unknown>[] };
           animProp.keyframes = animProp.keyframes
@@ -193,14 +233,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             .sort((a, b) => a.time - b.time);
           return layer;
         }),
-      },
-    })),
+      })),
 
-  setStaticValue: (layerId, propKey, value) =>
-    set((s) => ({
-      project: {
-        ...s.project,
-        composition: mapLayers(s.project.composition, layerId, (l) => {
+    setStaticValue: (layerId, propKey, value) =>
+      commit((p) => ({
+        ...p,
+        composition: mapLayers(p.composition, layerId, (l) => {
           const layer = cloneLayer(l);
           const animProp = layer.transform[propKey] as { static: unknown; keyframes: Keyframe<unknown>[] };
           if (animProp.keyframes.length === 0) {
@@ -216,11 +254,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           }
           return layer;
         }),
-      },
-    })),
+      })),
 
-  setExporting: (isExporting, progress = 0) => set({ isExporting, exportProgress: progress }),
-}));
+    setExporting: (isExporting, progress = 0) => set({ isExporting, exportProgress: progress }),
+  };
+});
 
 export function evaluatedTransformFor(layer: Layer, time: number) {
   return evaluateTransform(layer.transform, time);

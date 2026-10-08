@@ -22,6 +22,10 @@ export function Toolbar() {
   const newProject = useEditorStore((s) => s.newProject);
   const loadProject = useEditorStore((s) => s.loadProject);
   const setExporting = useEditorStore((s) => s.setExporting);
+  const undo = useEditorStore((s) => s.undo);
+  const redo = useEditorStore((s) => s.redo);
+  const canUndo = useEditorStore((s) => s.past.length > 0);
+  const canRedo = useEditorStore((s) => s.future.length > 0);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -77,12 +81,24 @@ export function Toolbar() {
       </div>
 
       <div className="toolbar-group">
+        <button onClick={undo} disabled={!canUndo} title="Undo (Ctrl+Z)">
+          ↶
+        </button>
+        <button onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Shift+Z)">
+          ↷
+        </button>
+      </div>
+
+      <div className="toolbar-group">
         <span className="toolbar-title">Add layer:</span>
         <button onClick={() => addLayer("text")}>T Text</button>
         <button onClick={() => addLayer("rect")}>▭ Rect</button>
         <button onClick={() => addLayer("ellipse")}>◯ Ellipse</button>
+        <button onClick={() => addLayer("polygon")}>⬠ Polygon</button>
+        <button onClick={() => addLayer("star")}>★ Star</button>
         <button onClick={() => addLayer("image")}>🖼 Image</button>
         <button onClick={() => addLayer("video")}>🎬 Video</button>
+        <button onClick={() => addLayer("audio")}>🔊 Audio</button>
       </div>
 
       <div className="toolbar-group">

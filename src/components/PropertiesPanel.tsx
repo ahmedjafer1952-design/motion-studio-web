@@ -1,9 +1,12 @@
 import type {
   AnimatablePropKey,
+  AudioLayerProps,
   Easing,
   ImageLayerProps,
+  PolygonLayerProps,
   Point,
   ShapeLayerProps,
+  StarLayerProps,
   TextLayerProps,
   VideoLayerProps,
 } from "../types";
@@ -165,6 +168,21 @@ export function PropertiesPanel() {
         {(layer.type === "rect" || layer.type === "ellipse") && (
           <ShapeFields props={layer.props as ShapeLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
         )}
+        {layer.type === "polygon" && (
+          <PolygonFields props={layer.props as PolygonLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
+        )}
+        {layer.type === "star" && (
+          <StarFields props={layer.props as StarLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
+        )}
+        {layer.type === "audio" && (
+          <AudioFields
+            props={layer.props as AudioLayerProps}
+            onChange={(p) => updateLayerProps(layer.id, p)}
+            onFitDuration={(naturalDuration, trimIn) =>
+              updateLayerTiming(layer.id, layer.startTime, layer.startTime + Math.max(0.1, naturalDuration - trimIn))
+            }
+          />
+        )}
         {layer.type === "image" && (
           <ImageFields props={layer.props as ImageLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
         )}
@@ -179,6 +197,7 @@ export function PropertiesPanel() {
         )}
       </div>
 
+      {layer.type !== "audio" && (
       <div className="properties-section">
         <h4>Transform</h4>
         <AnimRow layerId={layer.id} propKey="position" label="Position">
@@ -201,6 +220,7 @@ export function PropertiesPanel() {
           />
         </AnimRow>
       </div>
+      )}
 
       <div className="properties-section">
         <h4>Composition</h4>
@@ -331,9 +351,143 @@ function VideoFields({
           onChange={(e) => onChange({ trimIn: parseFloat(e.target.value) || 0 })}
         />
       </label>
+      <label className="field field-checkbox">
+        <input type="checkbox" checked={p.muted} onChange={(e) => onChange({ muted: e.target.checked })} />
+        <span>Mute audio</span>
+      </label>
       <p className="hint">
         Video is session-only: it isn't saved inside the project JSON. Re-add the file after reloading the page.
-        Export currently has no audio.
+      </p>
+    </>
+  );
+}
+
+function PolygonFields({ props: p, onChange }: { props: PolygonLayerProps; onChange: (p: Partial<PolygonLayerProps>) => void }) {
+  return (
+    <>
+      <div className="field-row">
+        <label className="field">
+          <span>Width</span>
+          <input type="number" value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
+        </label>
+        <label className="field">
+          <span>Height</span>
+          <input type="number" value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
+        </label>
+      </div>
+      <div className="field-row">
+        <label className="field">
+          <span>Color</span>
+          <input type="color" value={p.color} onChange={(e) => onChange({ color: e.target.value })} />
+        </label>
+        <label className="field">
+          <span>Sides</span>
+          <input
+            type="number"
+            min={3}
+            max={12}
+            value={p.sides}
+            onChange={(e) => onChange({ sides: Math.max(3, Math.min(12, parseInt(e.target.value) || 3)) })}
+          />
+        </label>
+      </div>
+    </>
+  );
+}
+
+function StarFields({ props: p, onChange }: { props: StarLayerProps; onChange: (p: Partial<StarLayerProps>) => void }) {
+  return (
+    <>
+      <div className="field-row">
+        <label className="field">
+          <span>Width</span>
+          <input type="number" value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
+        </label>
+        <label className="field">
+          <span>Height</span>
+          <input type="number" value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
+        </label>
+      </div>
+      <div className="field-row">
+        <label className="field">
+          <span>Color</span>
+          <input type="color" value={p.color} onChange={(e) => onChange({ color: e.target.value })} />
+        </label>
+        <label className="field">
+          <span>Points</span>
+          <input
+            type="number"
+            min={3}
+            max={12}
+            value={p.points}
+            onChange={(e) => onChange({ points: Math.max(3, Math.min(12, parseInt(e.target.value) || 3)) })}
+          />
+        </label>
+      </div>
+      <label className="field">
+        <span>Inner radius %</span>
+        <input
+          type="number"
+          min={5}
+          max={95}
+          value={Math.round(p.innerRatio * 100)}
+          onChange={(e) => onChange({ innerRatio: Math.max(0.05, Math.min(0.95, (parseFloat(e.target.value) || 50) / 100)) })}
+        />
+      </label>
+    </>
+  );
+}
+
+function AudioFields({
+  props: p,
+  onChange,
+  onFitDuration,
+}: {
+  props: AudioLayerProps;
+  onChange: (p: Partial<AudioLayerProps>) => void;
+  onFitDuration: (naturalDuration: number, trimIn: number) => void;
+}) {
+  const handleFile = (file: File) => {
+    const src = URL.createObjectURL(file);
+    const probe = document.createElement("audio");
+    probe.preload = "metadata";
+    probe.onloadedmetadata = () => {
+      onChange({ src, fileName: file.name, trimIn: 0, naturalDuration: probe.duration || 0 });
+    };
+    probe.src = src;
+  };
+  return (
+    <>
+      <label className="field">
+        <span>Audio file (mp3, wav…)</span>
+        <input type="file" accept="audio/*" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+      </label>
+      {p.src && (
+        <p className="hint">
+          {p.fileName || "audio"} · source length {p.naturalDuration.toFixed(2)}s
+          <br />
+          <button type="button" className="link-btn" onClick={() => onFitDuration(p.naturalDuration, p.trimIn)}>
+            fit layer duration to clip
+          </button>
+        </p>
+      )}
+      <label className="field">
+        <span>Trim in (s into source clip)</span>
+        <input
+          type="number"
+          step={0.1}
+          min={0}
+          max={p.naturalDuration || undefined}
+          value={p.trimIn}
+          onChange={(e) => onChange({ trimIn: parseFloat(e.target.value) || 0 })}
+        />
+      </label>
+      <label className="field field-checkbox">
+        <input type="checkbox" checked={p.muted} onChange={(e) => onChange({ muted: e.target.checked })} />
+        <span>Mute</span>
+      </label>
+      <p className="hint">
+        Audio is session-only: it isn't saved inside the project JSON. Re-add the file after reloading the page.
       </p>
     </>
   );

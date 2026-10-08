@@ -1,7 +1,13 @@
-import type { Composition } from "../types";
-import { preloadImages, preloadVideos, renderComposition, resetVideoLayers } from "./renderer";
+import type { AudioLayerProps, Composition, VideoLayerProps } from "../types";
+import { MediaSession, renderComposition } from "./renderer";
 
-const CANDIDATE_MIME_TYPES = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+const CANDIDATE_MIME_TYPES = [
+  "video/webm;codecs=vp9,opus",
+  "video/webm;codecs=vp8,opus",
+  "video/webm;codecs=vp9",
+  "video/webm;codecs=vp8",
+  "video/webm",
+];
 
 function pickMimeType(): string {
   for (const type of CANDIDATE_MIME_TYPES) {
@@ -18,8 +24,13 @@ export async function exportCompositionToVideo(
     throw new Error("This browser does not support in-browser video recording (MediaRecorder).");
   }
 
-  await Promise.all([preloadImages(comp), preloadVideos(comp)]);
-  resetVideoLayers(comp);
+  // A dedicated session, isolated from the live preview: export needs exclusive access to
+  // its own <video>/<audio> elements so it can tap their audio via the Web Audio API
+  // (createMediaElementSource can only ever be called once per element) without disturbing
+  // whatever the user is doing in the editor at the same time.
+  const session = new MediaSession();
+  await Promise.all([session.preloadImages(comp), session.preloadVideos(comp), session.preloadAudios(comp)]);
+  session.resetMediaLayers(comp);
 
   const canvas = document.createElement("canvas");
   canvas.width = comp.width;
@@ -28,13 +39,49 @@ export async function exportCompositionToVideo(
   if (!ctx) throw new Error("Could not create a 2D rendering context for export.");
 
   // Render the first frame before capturing so the stream starts with real content.
-  renderComposition(ctx, comp, 0, { playing: false });
+  renderComposition(ctx, comp, 0, { playing: false, session });
 
-  const stream = (canvas as HTMLCanvasElement & { captureStream: (fps?: number) => MediaStream }).captureStream(
+  const videoStream = (canvas as HTMLCanvasElement & { captureStream: (fps?: number) => MediaStream }).captureStream(
     comp.fps
   );
+
+  // Mix in audio from any video/audio layers via the Web Audio API.
+  let audioCtx: AudioContext | null = null;
+  const combinedStream = new MediaStream(videoStream.getVideoTracks());
+  const mediaSources: MediaElementAudioSourceNode[] = [];
+  try {
+    const hasAudioLayers = comp.layers.some(
+      (l) =>
+        (l.type === "video" && (l.props as VideoLayerProps).src && !(l.props as VideoLayerProps).muted) ||
+        (l.type === "audio" && (l.props as AudioLayerProps).src && !(l.props as AudioLayerProps).muted)
+    );
+    if (hasAudioLayers) {
+      const AudioCtxCtor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      audioCtx = new AudioCtxCtor();
+      const dest = audioCtx.createMediaStreamDestination();
+      for (const layer of comp.layers) {
+        if (layer.type === "video") {
+          const p = layer.props as VideoLayerProps;
+          if (!p.src || p.muted) continue;
+          const source = audioCtx.createMediaElementSource(session.getVideo(p.src));
+          source.connect(dest);
+          mediaSources.push(source);
+        } else if (layer.type === "audio") {
+          const p = layer.props as AudioLayerProps;
+          if (!p.src || p.muted) continue;
+          const source = audioCtx.createMediaElementSource(session.getAudio(p.src));
+          source.connect(dest);
+          mediaSources.push(source);
+        }
+      }
+      for (const track of dest.stream.getAudioTracks()) combinedStream.addTrack(track);
+    }
+  } catch (err) {
+    console.warn("Could not set up audio for export; continuing with video only.", err);
+  }
+
   const mimeType = pickMimeType();
-  const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+  const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 8_000_000 });
   const chunks: Blob[] = [];
 
   return new Promise<Blob>((resolve, reject) => {
@@ -43,8 +90,10 @@ export async function exportCompositionToVideo(
     };
     recorder.onerror = (e) => reject(e);
     recorder.onstop = () => {
-      stream.getTracks().forEach((t) => t.stop());
-      resetVideoLayers(comp);
+      combinedStream.getTracks().forEach((t) => t.stop());
+      mediaSources.forEach((s) => s.disconnect());
+      audioCtx?.close().catch(() => {});
+      session.dispose();
       resolve(new Blob(chunks, { type: mimeType }));
     };
 
@@ -54,7 +103,7 @@ export async function exportCompositionToVideo(
     const frame = () => {
       const elapsed = (performance.now() - startTs) / 1000;
       const t = Math.min(elapsed, comp.duration);
-      renderComposition(ctx, comp, t, { playing: true });
+      renderComposition(ctx, comp, t, { playing: true, session });
       onProgress?.(t / comp.duration);
       if (elapsed < comp.duration) {
         requestAnimationFrame(frame);

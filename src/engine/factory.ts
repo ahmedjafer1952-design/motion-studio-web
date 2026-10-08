@@ -37,10 +37,16 @@ function defaultProps(type: LayerType): Layer["props"] {
       return { width: 300, height: 180, color: "#4f8cff", radius: 12 } as ShapeLayerProps;
     case "ellipse":
       return { width: 220, height: 220, color: "#ff6b6b" } as ShapeLayerProps;
+    case "polygon":
+      return { width: 220, height: 220, color: "#7cff8a", sides: 6 };
+    case "star":
+      return { width: 220, height: 220, color: "#ffd166", points: 5, innerRatio: 0.5 };
     case "image":
       return { src: "", width: 300, height: 300 };
     case "video":
-      return { src: "", fileName: "", width: 640, height: 360, trimIn: 0, naturalDuration: 0, muted: true };
+      return { src: "", fileName: "", width: 640, height: 360, trimIn: 0, naturalDuration: 0, muted: false };
+    case "audio":
+      return { src: "", fileName: "", trimIn: 0, naturalDuration: 0, muted: false };
   }
 }
 
