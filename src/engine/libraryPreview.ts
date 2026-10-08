@@ -1,8 +1,9 @@
-import type { CaptionLayerProps, CaptionStyle, CaptionWord, Composition, Layer, LayerType } from "../types";
+import type { CaptionLayerProps, CaptionStyle, CaptionWord, Composition, Layer, LayerType, OverlayEffect, OverlayLayerProps } from "../types";
 import { createLayer } from "./factory";
 import { makeEllipse, makeRect, makeText } from "./builders";
 import { buildTemplateLayers, type TemplateId } from "./templates";
 import { buildScene, type SceneId } from "./scenes";
+import { buildSticker, type StickerId } from "./stickers";
 
 /** Everything a <LibraryCardPreview> needs to render one accurate frame: layers + the background to use. */
 export interface PreviewScene {
@@ -67,6 +68,34 @@ export function elementPreview(layerType: LayerType, rawComp: Composition): Prev
     return { layers: [layer, accent, backdrop], time: 0.6 };
   }
   return { layers: [layer], time: 0.6 };
+}
+
+export function stickerPreview(id: StickerId, rawComp: Composition): PreviewScene {
+  const comp = safeComp(rawComp);
+  return { layers: buildSticker(id, comp), time: 0.6 };
+}
+
+export function overlayPreview(effect: OverlayEffect, rawComp: Composition): PreviewScene {
+  const comp = safeComp(rawComp);
+  const backdrop = makeRect(comp, {
+    width: comp.width,
+    height: comp.height,
+    x: comp.width / 2,
+    y: comp.height / 2,
+    color: "#3a5fd9",
+    name: "Backdrop",
+  });
+  const accent = makeEllipse(comp, {
+    width: comp.height * 0.6,
+    height: comp.height * 0.6,
+    x: comp.width * 0.3,
+    y: comp.height * 0.4,
+    color: "#ff8a3d",
+    name: "Backdrop Accent",
+  });
+  const base = createLayer("overlay", comp);
+  const overlayLayer: Layer = { ...base, props: { ...(base.props as OverlayLayerProps), effect } };
+  return { layers: [overlayLayer, accent, backdrop], time: 0.6 };
 }
 
 /** A warm, varied-color "landscape" sample used to showcase cinematic color-grade presets. */

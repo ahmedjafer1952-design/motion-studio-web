@@ -12,7 +12,11 @@ export type PresetId =
   | "slideInTop"
   | "slideInBottom"
   | "popIn"
-  | "panRight";
+  | "panRight"
+  | "whipPanLeft"
+  | "whipPanRight"
+  | "zoomPunch"
+  | "glitchCut";
 
 export interface PresetDef {
   id: PresetId;
@@ -31,6 +35,10 @@ export const MOTION_PRESETS: PresetDef[] = [
   { id: "slideInBottom", label: "Slide In ↓ Bottom", description: "Slides in from the bottom edge" },
   { id: "popIn", label: "Pop In", description: "Bouncy scale pop at the start" },
   { id: "panRight", label: "Camera Pan →", description: "Slow drift to the right across the layer's duration" },
+  { id: "whipPanLeft", label: "Whip Pan ←", description: "Fast cut-in from the right, like a quick camera swing" },
+  { id: "whipPanRight", label: "Whip Pan →", description: "Fast cut-in from the left, like a quick camera swing" },
+  { id: "zoomPunch", label: "Zoom Punch", description: "Snaps in from an over-zoomed cut, very fast" },
+  { id: "glitchCut", label: "Glitch Cut", description: "Jittery, flickery digital-glitch entrance" },
 ];
 
 function kf<T>(time: number, value: T, easing: Easing = "easeOut"): Keyframe<T> {
@@ -110,6 +118,59 @@ export function applyPresetToLayer(layer: Layer, presetId: PresetId, comp: Compo
       clone.transform.position = {
         static: base.position,
         keyframes: [kf(start, a, "linear"), kf(end, b, "linear")],
+      };
+      break;
+    }
+    case "whipPanLeft":
+    case "whipPanRight": {
+      const d = 0.22;
+      const dx = presetId === "whipPanLeft" ? comp.width * 0.5 : -comp.width * 0.5;
+      const off: Point = { x: base.position.x + dx, y: base.position.y };
+      clone.transform.position = {
+        static: base.position,
+        keyframes: [kf(start, off, "easeOut"), kf(start + d, base.position, "easeOut")],
+      };
+      clone.transform.opacity = {
+        static: base.opacity,
+        keyframes: [kf(start, 0.2, "easeOut"), kf(start + d * 0.6, base.opacity, "easeOut")],
+      };
+      break;
+    }
+    case "zoomPunch": {
+      const d = 0.18;
+      const over: Point = { x: base.scale.x * 1.35, y: base.scale.y * 1.35 };
+      clone.transform.scale = {
+        static: base.scale,
+        keyframes: [kf(start, over, "easeOut"), kf(start + d, base.scale, "easeOut")],
+      };
+      clone.transform.opacity = {
+        static: base.opacity,
+        keyframes: [kf(start, 0.3, "linear"), kf(start + d * 0.5, base.opacity, "linear")],
+      };
+      break;
+    }
+    case "glitchCut": {
+      const jitter = Math.max(8, comp.width * 0.012);
+      const positions: Point[] = [
+        { x: base.position.x - jitter, y: base.position.y },
+        { x: base.position.x + jitter, y: base.position.y },
+        { x: base.position.x - jitter * 0.5, y: base.position.y },
+        { x: base.position.x, y: base.position.y },
+      ];
+      const step = 0.045;
+      clone.transform.position = {
+        static: base.position,
+        keyframes: positions.map((pos, i) => kf(start + i * step, pos, "linear")),
+      };
+      clone.transform.opacity = {
+        static: base.opacity,
+        keyframes: [
+          kf(start, base.opacity, "linear"),
+          kf(start + step, base.opacity * 0.3, "linear"),
+          kf(start + step * 2, base.opacity, "linear"),
+          kf(start + step * 3, base.opacity * 0.5, "linear"),
+          kf(start + step * 4, base.opacity, "linear"),
+        ],
       };
       break;
     }

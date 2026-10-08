@@ -105,6 +105,7 @@ export function Toolbar() {
         <button onClick={() => addLayer("audio")}>🔊 Audio</button>
         <button onClick={() => addLayer("caption")}>💬 Captions</button>
         <button onClick={() => addLayer("glass")}>◐ Glass</button>
+        <button onClick={() => addLayer("overlay")}>▦ Overlay</button>
       </div>
 
       <div className="toolbar-group">

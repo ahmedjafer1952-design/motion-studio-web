@@ -3,6 +3,7 @@ import type {
   Composition,
   Layer,
   LayerType,
+  OverlayLayerProps,
   Point,
   Project,
   ShapeLayerProps,
@@ -67,11 +68,17 @@ function defaultProps(type: LayerType): Layer["props"] {
         tint: "rgba(255,255,255,0.10)",
         borderColor: "rgba(255,255,255,0.28)",
       };
+    case "overlay":
+      return { effect: "grain", intensity: 0.5, width: 1280, height: 720 } as OverlayLayerProps;
   }
 }
 
 export function createLayer(type: LayerType, comp: Composition): Layer {
   const props = defaultProps(type);
+  if (type === "overlay") {
+    (props as OverlayLayerProps).width = comp.width;
+    (props as OverlayLayerProps).height = comp.height;
+  }
   const w = "width" in props ? props.width : 300;
   const h = "height" in props ? props.height : 300;
   const transform = defaultTransform(w, h, comp.width, comp.height);

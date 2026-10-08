@@ -1,7 +1,10 @@
-import type { CaptionStyle, ColorGradeId, LayerType } from "../types";
+import type { CaptionStyle, ColorGradeId, LayerType, OverlayEffect } from "../types";
 import { MOTION_TEMPLATES, type TemplateId } from "./templates";
 import { FACELESS_SCENES, type SceneId } from "./scenes";
 import { COLOR_GRADES } from "./colorGrade";
+import { SOUND_LIBRARY, type SoundId } from "./sounds";
+import { STICKERS, type StickerId } from "./stickers";
+import { OVERLAY_LIBRARY } from "./overlays";
 
 export type LibraryCategoryId =
   | "text"
@@ -9,7 +12,9 @@ export type LibraryCategoryId =
   | "lists"
   | "captions"
   | "scenes"
+  | "motion"
   | "grade"
+  | "sound"
   | "elements"
   | "autoedit";
 
@@ -25,7 +30,9 @@ export const LIBRARY_CATEGORIES: LibraryCategory[] = [
   { id: "capsules", icon: "⬭", label: "كبسولات وأزرار" },
   { id: "lists", icon: "≣", label: "قوائم ومؤشرات" },
   { id: "scenes", icon: "🎭", label: "فيسلس" },
+  { id: "motion", icon: "🌀", label: "ستيكرز وحركة" },
   { id: "grade", icon: "🎨", label: "تلوين سينمائي" },
+  { id: "sound", icon: "🔊", label: "مكتبة الأصوات" },
   { id: "elements", icon: "◐", label: "عناصر" },
   { id: "autoedit", icon: "✨", label: "منطق ذكاء" },
 ];
@@ -79,7 +86,37 @@ export interface GradeCard {
   tint?: { color: string; alpha: number; blend: GlobalCompositeOperation };
 }
 
-export type LibraryCard = TemplateCard | CaptionCard | ElementCard | SceneGroupCard | AutoEditCard | GradeCard;
+export interface SoundCard {
+  kind: "sound";
+  id: SoundId;
+  label: string;
+  description: string;
+}
+
+export interface StickerCard {
+  kind: "sticker";
+  id: StickerId;
+  label: string;
+  description: string;
+}
+
+export interface OverlayCard {
+  kind: "overlay";
+  id: OverlayEffect;
+  label: string;
+  description: string;
+}
+
+export type LibraryCard =
+  | TemplateCard
+  | CaptionCard
+  | ElementCard
+  | SceneGroupCard
+  | AutoEditCard
+  | GradeCard
+  | SoundCard
+  | StickerCard
+  | OverlayCard;
 
 export const GRADE_CARDS: GradeCard[] = COLOR_GRADES.map((g) => ({
   kind: "grade",
@@ -90,6 +127,27 @@ export const GRADE_CARDS: GradeCard[] = COLOR_GRADES.map((g) => ({
   tint: g.tint,
 }));
 
+export const SOUND_CARDS: SoundCard[] = SOUND_LIBRARY.map((s) => ({
+  kind: "sound",
+  id: s.id,
+  label: s.label,
+  description: s.description,
+}));
+
+export const STICKER_CARDS: StickerCard[] = STICKERS.map((s) => ({
+  kind: "sticker",
+  id: s.id,
+  label: s.label,
+  description: `${s.icon} ملصق متحرك قابل للسحب لأي مكان`,
+}));
+
+export const OVERLAY_CARDS: OverlayCard[] = OVERLAY_LIBRARY.map((o) => ({
+  kind: "overlay",
+  id: o.id,
+  label: o.label,
+  description: o.description,
+}));
+
 const TEMPLATE_SWATCH: Record<TemplateId, [string, string]> = {
   titleCard: ["#4f8cff", "#2a2a30"],
   lowerThird: ["#4f8cff", "#1b1b1e"],
@@ -97,11 +155,16 @@ const TEMPLATE_SWATCH: Record<TemplateId, [string, string]> = {
   ctaButton: ["#7cff8a", "#1b1b1e"],
   bigNumber: ["#ffd166", "#1b1b1e"],
   animatedList: ["#ff8a65", "#1b1b1e"],
+  typewriterText: ["#4f8cff", "#1b1b1e"],
+  highlightText: ["#ffd166", "#1b1b1e"],
+  countUpNumber: ["#ffd166", "#1b1b1e"],
+  orbitingIcons: ["#ff8a65", "#1b1b1e"],
 };
 
-const TEXT_IDS: TemplateId[] = ["titleCard", "lowerThird"];
+const TEXT_IDS: TemplateId[] = ["titleCard", "lowerThird", "typewriterText", "highlightText"];
 const CAPSULE_IDS: TemplateId[] = ["badge", "ctaButton"];
-const LIST_IDS: TemplateId[] = ["bigNumber", "animatedList"];
+const LIST_IDS: TemplateId[] = ["bigNumber", "animatedList", "countUpNumber"];
+const MOTION_IDS: TemplateId[] = ["orbitingIcons"];
 
 function templateCards(ids: TemplateId[]): TemplateCard[] {
   return MOTION_TEMPLATES.filter((t) => ids.includes(t.id)).map((t) => ({
@@ -116,6 +179,7 @@ function templateCards(ids: TemplateId[]): TemplateCard[] {
 export const TEXT_CARDS = templateCards(TEXT_IDS);
 export const CAPSULE_CARDS = templateCards(CAPSULE_IDS);
 export const LIST_CARDS = templateCards(LIST_IDS);
+export const MOTION_CARDS = templateCards(MOTION_IDS);
 
 export const CAPTION_CARDS: CaptionCard[] = [
   { kind: "caption", id: "bigWord", label: "كلمة كبيرة", description: "كلمة واحدة بالوقت، تكبر وتختفي", swatch: ["#ffffff", "#1b1b1e"] },
@@ -179,11 +243,15 @@ export function cardsForCategory(category: LibraryCategoryId): LibraryCard[] {
     case "captions":
       return CAPTION_CARDS;
     case "elements":
-      return ELEMENT_CARDS;
+      return [...ELEMENT_CARDS, ...OVERLAY_CARDS];
     case "scenes":
       return SCENE_GROUP_CARDS;
+    case "motion":
+      return [...MOTION_CARDS, ...STICKER_CARDS];
     case "grade":
       return GRADE_CARDS;
+    case "sound":
+      return SOUND_CARDS;
     case "autoedit":
       return [AUTOEDIT_CARD];
   }

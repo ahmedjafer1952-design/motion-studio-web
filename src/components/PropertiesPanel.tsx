@@ -8,6 +8,7 @@ import type {
   GlassLayerProps,
   ImageLayerProps,
   Layer,
+  OverlayLayerProps,
   PolygonLayerProps,
   Point,
   ShapeLayerProps,
@@ -201,6 +202,9 @@ export function PropertiesPanel() {
         )}
         {layer.type === "glass" && (
           <GlassFields props={layer.props as GlassLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
+        )}
+        {layer.type === "overlay" && (
+          <OverlayFields props={layer.props as OverlayLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
         )}
         {layer.type === "image" && (
           <ImageFields props={layer.props as ImageLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
@@ -719,6 +723,44 @@ function GlassFields({ props: p, onChange }: { props: GlassLayerProps; onChange:
       </div>
       <p className="hint">Blurs whatever is already drawn behind it (video, shapes…) — a real frosted-glass look.</p>
       <p className="hint">Rotation isn't supported on glass panels (position, scale and opacity still work).</p>
+    </>
+  );
+}
+
+function OverlayFields({ props: p, onChange }: { props: OverlayLayerProps; onChange: (p: Partial<OverlayLayerProps>) => void }) {
+  return (
+    <>
+      <label className="field">
+        <span>Effect</span>
+        <select value={p.effect} onChange={(e) => onChange({ effect: e.target.value as OverlayLayerProps["effect"] })}>
+          <option value="grain">Film grain</option>
+          <option value="vhs">VHS</option>
+          <option value="vignette">Vignette</option>
+          <option value="scanlines">Scanlines</option>
+        </select>
+      </label>
+      <label className="field">
+        <span>Intensity</span>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.05}
+          value={p.intensity}
+          onChange={(e) => onChange({ intensity: parseFloat(e.target.value) })}
+        />
+      </label>
+      <div className="field-row">
+        <label className="field">
+          <span>Width</span>
+          <input type="number" value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
+        </label>
+        <label className="field">
+          <span>Height</span>
+          <input type="number" value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
+        </label>
+      </div>
+      <p className="hint">Full-bleed texture drawn over whatever's behind it — usually left at the frame's full size.</p>
     </>
   );
 }

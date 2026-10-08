@@ -16,6 +16,7 @@ import { buildTemplateLayers, type TemplateId } from "../engine/templates";
 import { buildScene, type SceneId } from "../engine/scenes";
 import { buildAutoEdit, type AutoEditOptions } from "../engine/autoEdit";
 import type { TranscribedWord } from "../engine/transcribe";
+import { buildSticker, type StickerId } from "../engine/stickers";
 import { makeId } from "../utils/id";
 
 const MAX_HISTORY = 100;
@@ -39,7 +40,7 @@ interface EditorState {
   updateComposition: (patch: Partial<Composition>) => void;
 
   addLayer: (type: LayerType) => void;
-  addLayerWithProps: (type: LayerType, propsPatch: Record<string, unknown>) => void;
+  addLayerWithProps: (type: LayerType, propsPatch: Record<string, unknown>, durationOverride?: number) => void;
   removeLayer: (layerId: string) => void;
   selectLayer: (layerId: string | null) => void;
   renameLayer: (layerId: string, name: string) => void;
@@ -49,6 +50,7 @@ interface EditorState {
   applyMotionPreset: (layerId: string, presetId: PresetId) => void;
   applyTemplate: (templateId: TemplateId) => void;
   applyScene: (sceneId: SceneId) => void;
+  insertSticker: (stickerId: StickerId) => void;
   applyAutoEdit: (sourceLayerId: string, words: TranscribedWord[], opts: AutoEditOptions) => void;
 
   setPlayhead: (time: number) => void;
@@ -142,9 +144,13 @@ export const useEditorStore = create<EditorState>((set, get) => {
       );
     },
 
-    addLayerWithProps: (type, propsPatch) => {
+    addLayerWithProps: (type, propsPatch, durationOverride) => {
       const base = createLayer(type, get().project.composition);
-      const layer: Layer = { ...base, props: { ...base.props, ...propsPatch } as Layer["props"] };
+      const layer: Layer = {
+        ...base,
+        endTime: durationOverride != null ? base.startTime + durationOverride : base.endTime,
+        props: { ...base.props, ...propsPatch } as Layer["props"],
+      };
       commit(
         (p) => ({ ...p, composition: { ...p.composition, layers: [layer, ...p.composition.layers] } }),
         { selectedLayerId: layer.id }
@@ -214,6 +220,14 @@ export const useEditorStore = create<EditorState>((set, get) => {
           ...p,
           composition: { ...p.composition, backgroundColor, layers: [...layers, ...p.composition.layers] },
         }),
+        { selectedLayerId: layers[0]?.id ?? null }
+      );
+    },
+
+    insertSticker: (stickerId) => {
+      const layers = buildSticker(stickerId, get().project.composition);
+      commit(
+        (p) => ({ ...p, composition: { ...p.composition, layers: [...layers, ...p.composition.layers] } }),
         { selectedLayerId: layers[0]?.id ?? null }
       );
     },

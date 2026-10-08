@@ -1,10 +1,19 @@
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import { useEditorStore } from "../state/store";
 import { LIBRARY_CATEGORIES, cardsForCategory, type LibraryCategoryId } from "../engine/libraryCatalog";
 import type { TemplateId } from "../engine/templates";
 import type { SceneId } from "../engine/scenes";
-import { captionPreview, elementPreview, gradeDemoPreview, scenePreview, templatePreview } from "../engine/libraryPreview";
+import {
+  captionPreview,
+  elementPreview,
+  gradeDemoPreview,
+  overlayPreview,
+  scenePreview,
+  stickerPreview,
+  templatePreview,
+} from "../engine/libraryPreview";
 import { LibraryCardPreview } from "./LibraryCardPreview";
+import { getSoundUrl } from "../engine/sounds";
 
 export function LibraryPanel({
   onClose,
@@ -17,6 +26,7 @@ export function LibraryPanel({
   const [flashId, setFlashId] = useState<string | null>(null);
   const applyTemplate = useEditorStore((s) => s.applyTemplate);
   const applyScene = useEditorStore((s) => s.applyScene);
+  const insertSticker = useEditorStore((s) => s.insertSticker);
   const addLayer = useEditorStore((s) => s.addLayer);
   const addLayerWithProps = useEditorStore((s) => s.addLayerWithProps);
   const updateComposition = useEditorStore((s) => s.updateComposition);
@@ -26,6 +36,18 @@ export function LibraryPanel({
   const flash = (id: string) => {
     setFlashId(id);
     setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 350);
+  };
+
+  const insertSound = async (id: Parameters<typeof getSoundUrl>[0]) => {
+    const url = await getSoundUrl(id);
+    addLayerWithProps("audio", { src: url, fileName: `${id}.wav`, trimIn: 0, naturalDuration: 1, muted: false }, 1.2);
+    flash(id);
+  };
+
+  const previewSound = async (id: Parameters<typeof getSoundUrl>[0], e: MouseEvent) => {
+    e.stopPropagation();
+    const url = await getSoundUrl(id);
+    new Audio(url).play().catch(() => {});
   };
 
   const cards = cardsForCategory(category);
@@ -102,6 +124,42 @@ export function LibraryPanel({
                   </button>
                 );
               }
+              if (card.kind === "sticker") {
+                return (
+                  <button
+                    key={card.id}
+                    className={`library-card ${flashId === card.id ? "flash" : ""}`}
+                    onClick={() => {
+                      insertSticker(card.id);
+                      flash(card.id);
+                    }}
+                  >
+                    <div className="library-card-preview">
+                      <LibraryCardPreview scene={stickerPreview(card.id, comp)} width={pw} height={ph} />
+                    </div>
+                    <div className="library-card-label">{card.label}</div>
+                    <div className="library-card-desc">{card.description}</div>
+                  </button>
+                );
+              }
+              if (card.kind === "overlay") {
+                return (
+                  <button
+                    key={card.id}
+                    className={`library-card ${flashId === card.id ? "flash" : ""}`}
+                    onClick={() => {
+                      addLayerWithProps("overlay", { effect: card.id, intensity: 0.5, width: pw, height: ph });
+                      flash(card.id);
+                    }}
+                  >
+                    <div className="library-card-preview">
+                      <LibraryCardPreview scene={overlayPreview(card.id, comp)} width={pw} height={ph} />
+                    </div>
+                    <div className="library-card-label">{card.label}</div>
+                    <div className="library-card-desc">{card.description}</div>
+                  </button>
+                );
+              }
               if (card.kind === "sceneGroup") {
                 return (
                   <div key={card.type} className="library-card library-card-scene">
@@ -155,6 +213,32 @@ export function LibraryPanel({
                     <div className="library-card-label">{card.label}</div>
                     <div className="library-card-desc">{card.description}</div>
                   </button>
+                );
+              }
+              if (card.kind === "sound") {
+                return (
+                  <div
+                    key={card.id}
+                    role="button"
+                    tabIndex={0}
+                    className={`library-card ${flashId === card.id ? "flash" : ""}`}
+                    onClick={() => insertSound(card.id)}
+                    onKeyDown={(e) => e.key === "Enter" && insertSound(card.id)}
+                  >
+                    <div className="library-card-preview sound-preview">
+                      <span className="sound-icon">🔊</span>
+                      <button
+                        type="button"
+                        className="sound-play-btn"
+                        title="معاينة الصوت"
+                        onClick={(e) => previewSound(card.id, e)}
+                      >
+                        ▶
+                      </button>
+                    </div>
+                    <div className="library-card-label">{card.label}</div>
+                    <div className="library-card-desc">{card.description}</div>
+                  </div>
                 );
               }
               // autoedit

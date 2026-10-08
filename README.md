@@ -6,13 +6,15 @@ automatically. Layers, a keyframeable timeline, a canvas-based compositor,
 speech-to-text, and video export, all running client-side: no backend, no
 account, no upload.
 
-## Features (v0.6)
+## Features (v0.7)
 
-- **Layers**: text, rectangle, ellipse, polygon (3–12 sides), star, image,
-  video (import an mp4/webm clip, trim its in-point), audio (import mp3/wav,
-  trim its in-point), captions (auto-generated from a video/audio layer's
-  speech, Arabic-first), and a **glass panel** (real frosted-glass blur over
-  whatever's behind it).
+- **Layers**: text (incl. a typewriter reveal, `[bracket]` word-highlighting,
+  and a 0→N count-up mode), rectangle, ellipse, polygon (3–12 sides), star,
+  image, video (import an mp4/webm clip, trim its in-point), audio (import
+  mp3/wav, trim its in-point), captions (auto-generated from a video/audio
+  layer's speech, Arabic-first), a **glass panel** (real frosted-glass blur
+  over whatever's behind it), and an **overlay** (full-bleed film grain /
+  VHS / vignette / scanlines texture).
 - **Keyframeable transform properties**: position, scale, rotation, opacity —
   each with per-keyframe easing (linear / ease in / ease out / ease in-out).
 - **Auto captions**: fully in-browser speech-to-text (Whisper via
@@ -23,16 +25,29 @@ account, no upload.
   line + emphasis-only. Proper RTL layout for Arabic text.
 - **Motion library panel** (📚 المكتبة): a browsable, categorized library —
   an icon rail (text & titles, captions, capsules/buttons, lists, faceless
-  scenes, color grading, elements, Auto Edit) next to a grid of cards, click
-  to insert. Every card renders a **real accurate frame through the actual
-  engine** (not a mockup/placeholder) — the same `renderComposition()`
-  preview/export share — so what you see is exactly what you get. Covers
-  the Title Card / Lower Third / Badge / CTA Button / Big Number / Animated
-  List templates, all 4 caption styles (with a sample sentence), all 24
-  faceless scenes (a real-rendered thumbnail per color variant, not a flat
-  swatch), shapes/glass, and the color-grade looks — plus 10 **motion
-  presets** (fade/zoom/slide/pop/pan) you can apply to *any* layer from its
-  properties panel to animate it in or out.
+  scenes, stickers & motion, color grading, sound library, elements,
+  Auto Edit) next to a grid of cards, click to insert. Every card renders a
+  **real accurate frame through the actual engine** (not a mockup/
+  placeholder) — the same `renderComposition()` preview/export share — so
+  what you see is exactly what you get. Covers the Title Card / Lower Third
+  / Badge / CTA Button / Big Number / Animated List / Typewriter /
+  Highlighted-Text / Count-Up-Number templates, all 4 caption styles (with a
+  sample sentence), all 24 faceless scenes (a real-rendered thumbnail per
+  color variant, not a flat swatch), orbiting icons, 8 animated emoji
+  stickers, 4 overlay effects, shapes/glass, a 19-sound synthesized SFX
+  library, and the color-grade looks — plus 14 **motion presets**
+  (fade/zoom/slide/pop/pan/whip-pan/zoom-punch/glitch-cut) you can apply to
+  *any* layer from its properties panel to animate it in or out.
+- **Sound library** (🔊 مكتبة الأصوات): 19 UI/SFX sounds (pop, whoosh, ding,
+  click, riser, impact, coin, laser, success…) synthesized on the fly with
+  the Web Audio API — no audio files shipped. Preview with the ▶ button or
+  click to insert as a real audio layer; mixes into export exactly like any
+  uploaded sound.
+- **Stickers & camera transitions**: 8 animated emoji stickers (fire, heart,
+  star, thumbs-up…) with a gentle wiggle loop, an **orbiting icons** template
+  (icons circling a center product), and 4 fast camera-cut presets (whip pan
+  left/right, zoom punch, glitch cut) alongside the existing fade/slide/pop/
+  pan set.
 - **Cinematic color grading**: 10 whole-composition "looks" (Teal & Orange,
   Moody Blue, Warm Film, Noir B&W, Vintage Sepia, High Contrast, Cyberpunk,
   Faded Pastel, Golden Hour, Day-for-Night) applied as a post-process pass
@@ -114,13 +129,20 @@ src/
                                  # emphasis, pauses) + assembles a first cut
     libraryPreview.ts            # builds the sample layers each library
                                   # card previews, per category
+    stickers.ts                   # 8 animated emoji stickers + orbiting-icon
+                                   # orbit-loop keyframe helper
+    overlays.ts                    # film grain / VHS / vignette / scanlines
+                                    # overlay effect metadata
+    sounds.ts                       # 19 synthesized UI sounds (Web Audio
+                                     # OfflineAudioContext → WAV blob, cached)
   state/
     store.ts            # Zustand store: project state, undo/redo, actions
   components/
     Toolbar.tsx          # add layer, undo/redo, library, Auto Edit,
                           # play/pause, save/load, export
     LibraryPanel.tsx      # browsable library: category rail + preview-card
-                           # grid (templates, captions, scenes, grades, elements)
+                           # grid (templates, captions, scenes, grades,
+                           # sounds, stickers, overlays, elements)
     LibraryCardPreview.tsx # renders one real accurate frame per card via
                             # renderComposition — WYSIWYG, not a mockup
     AutoEditDialog.tsx   # Auto Edit's source/pace/title/CTA config modal
@@ -140,17 +162,15 @@ including Auto Edit's whole multi-layer assembly.
 
 ## Roadmap ideas
 
-The four big pieces of the original plan (Auto Captions, Motion Library,
-Faceless Scenes, Auto Edit) are all in. Next:
+The original plan (Auto Captions, Motion Library, Faceless Scenes, Auto
+Edit) plus a first library-expansion pass (text components, orbiting
+icons/camera presets, sound library, stickers/overlays) are all in. Next:
 
 - **Smarter Auto Edit**: swap the rule-based heuristics for an actual
   language model where available, pick a faceless scene automatically based
   on content, vary the number-callout/list layout more.
-- **More motion library components**: orbiting icons, cards, a proper
+- **More motion library components**: animated cards, a proper
   camera-move/transition preset between two layers, more templates.
-- **Sound library**: procedurally-generated UI sound effects (pop, whoosh,
-  ding…) via the Web Audio API, playable on template insert and mixed into
-  export.
 - Drag keyframes directly on the timeline (currently edited via the
   properties panel + "add keyframe at playhead" stopwatch button).
 - Persisting uploaded video/image/audio files across reloads (e.g.

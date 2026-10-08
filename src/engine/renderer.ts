@@ -6,6 +6,7 @@ import type {
   GlassLayerProps,
   Layer,
   ImageLayerProps,
+  OverlayLayerProps,
   PolygonLayerProps,
   ShapeLayerProps,
   StarLayerProps,
@@ -257,6 +258,78 @@ function groupCaptionWordsIntoLines(words: CaptionWord[], gapThreshold = 0.6, ma
   return lines;
 }
 
+/** Splits "plain [emphasized] plain" content into words, flagging which ones were bracketed. */
+function parseEmphasisWords(content: string): { text: string; emphasis: boolean }[] {
+  const segments: { text: string; emphasis: boolean }[] = [];
+  const re = /\[([^\]]+)\]/g;
+  let lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content))) {
+    if (m.index > lastIndex) segments.push({ text: content.slice(lastIndex, m.index), emphasis: false });
+    segments.push({ text: m[1], emphasis: true });
+    lastIndex = re.lastIndex;
+  }
+  if (lastIndex < content.length) segments.push({ text: content.slice(lastIndex), emphasis: false });
+
+  const words: { text: string; emphasis: boolean }[] = [];
+  for (const seg of segments) {
+    for (const w of seg.text.split(/\s+/)) {
+      if (w) words.push({ text: w, emphasis: seg.emphasis });
+    }
+  }
+  return words;
+}
+
+/** Draws a "plain [emphasized] plain" line, right-to-left, honoring the layer's alignment. */
+function drawEmphasisLine(ctx: CanvasRenderingContext2D, p: TextLayerProps, words: { text: string; emphasis: boolean }[]) {
+  ctx.direction = "rtl";
+  const gap = p.fontSize * 0.28;
+  const widths = words.map((w) => ctx.measureText(w.text).width);
+  const totalWidth = widths.reduce((a, b) => a + b, 0) + gap * (words.length - 1);
+  let x = p.align === "left" ? -totalWidth + widths[0] : p.align === "right" ? 0 : totalWidth / 2;
+  ctx.textAlign = "right";
+  for (let i = 0; i < words.length; i++) {
+    ctx.fillStyle = words[i].emphasis ? p.emphasisColor ?? "#ffd166" : p.color;
+    ctx.fillText(words[i].text, x, 0);
+    x -= widths[i] + gap;
+  }
+}
+
+function drawText(ctx: CanvasRenderingContext2D, p: TextLayerProps, localTime: number) {
+  ctx.font = `${p.fontSize}px ${p.fontFamily}`;
+  ctx.textBaseline = "middle";
+
+  if (p.countTo != null) {
+    const dur = Math.max(0.05, p.countDuration ?? 1.5);
+    const progress = Math.max(0, Math.min(1, localTime / dur));
+    const n = Math.round(progress * p.countTo);
+    ctx.fillStyle = p.color;
+    ctx.textAlign = p.align;
+    ctx.direction = "ltr";
+    ctx.fillText(String(n), 0, 0);
+    return;
+  }
+
+  let content = p.content;
+  if (p.revealSpeed && p.revealSpeed > 0) {
+    const maxChars = Math.max(0, Math.floor(Math.max(0, localTime) * p.revealSpeed));
+    content = content.slice(0, maxChars);
+    if (content.length === 0) return;
+  }
+
+  if (content.includes("[")) {
+    const words = parseEmphasisWords(content);
+    if (words.length > 0) {
+      drawEmphasisLine(ctx, p, words);
+      return;
+    }
+  }
+
+  ctx.fillStyle = p.color;
+  ctx.textAlign = p.align;
+  ctx.fillText(content, 0, 0);
+}
+
 function drawCaption(ctx: CanvasRenderingContext2D, p: CaptionLayerProps, t: number) {
   if (p.words.length === 0) return;
   ctx.direction = "rtl";
@@ -355,6 +428,53 @@ function drawGlassPanel(ctx: CanvasRenderingContext2D, layer: Layer, time: numbe
   ctx.restore();
 }
 
+/** Draws a full-bleed texture effect (grain/VHS/vignette/scanlines) in the layer's local, centered coordinate space. */
+function drawOverlayEffect(ctx: CanvasRenderingContext2D, p: OverlayLayerProps) {
+  const w = p.width;
+  const h = p.height;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-w / 2, -h / 2, w, h);
+  ctx.clip();
+
+  if (p.effect === "vignette" || p.effect === "vhs") {
+    const grad = ctx.createRadialGradient(0, 0, Math.min(w, h) * 0.25, 0, 0, Math.max(w, h) * 0.72);
+    grad.addColorStop(0, "rgba(0,0,0,0)");
+    grad.addColorStop(1, `rgba(0,0,0,${0.7 * p.intensity})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+  }
+
+  if (p.effect === "scanlines" || p.effect === "vhs") {
+    ctx.fillStyle = `rgba(0,0,0,${0.3 * p.intensity})`;
+    const lineH = 3;
+    for (let y = -h / 2; y < h / 2; y += lineH * 2) ctx.fillRect(-w / 2, y, w, lineH);
+  }
+
+  if (p.effect === "grain" || p.effect === "vhs") {
+    const dotCount = Math.floor((p.effect === "grain" ? 1400 : 700) * p.intensity);
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    for (let i = 0; i < dotCount; i++) {
+      const x = -w / 2 + Math.random() * w;
+      const y = -h / 2 + Math.random() * h;
+      ctx.globalAlpha = Math.random() * 0.5;
+      ctx.fillRect(x, y, 1.5, 1.5);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  if (p.effect === "vhs") {
+    ctx.globalAlpha = 0.22 * p.intensity;
+    ctx.fillStyle = "#ff2b6d";
+    for (let i = 0; i < 2; i++) ctx.fillRect(-w / 2, -h / 2 + Math.random() * h, w, 2);
+    ctx.fillStyle = "#2bd6ff";
+    for (let i = 0; i < 2; i++) ctx.fillRect(-w / 2, -h / 2 + Math.random() * h, w, 2);
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
 function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, opts: Required<RenderOptions>) {
   const active = time >= layer.startTime && time <= layer.endTime;
 
@@ -424,12 +544,7 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
       break;
     }
     case "text": {
-      const p = layer.props as TextLayerProps;
-      ctx.fillStyle = p.color;
-      ctx.font = `${p.fontSize}px ${p.fontFamily}`;
-      ctx.textAlign = p.align;
-      ctx.textBaseline = "middle";
-      ctx.fillText(p.content, 0, 0);
+      drawText(ctx, layer.props as TextLayerProps, time - layer.startTime);
       break;
     }
     case "image": {
@@ -453,6 +568,10 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
       const p = layer.props as CaptionLayerProps;
       const localTime = time - layer.startTime + p.sourceTrimIn;
       drawCaption(ctx, p, localTime);
+      break;
+    }
+    case "overlay": {
+      drawOverlayEffect(ctx, layer.props as OverlayLayerProps);
       break;
     }
   }

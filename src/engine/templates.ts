@@ -1,9 +1,19 @@
-import type { Composition, Layer } from "../types";
-import { makeRect, makeText } from "./builders";
+import type { Composition, Keyframe, Layer, Point, TextLayerProps } from "../types";
+import { makeImage, makeRect, makeText } from "./builders";
 import { applyPresetToLayer } from "./presets";
 import { makeId } from "../utils/id";
 
-export type TemplateId = "titleCard" | "lowerThird" | "badge" | "ctaButton" | "bigNumber" | "animatedList";
+export type TemplateId =
+  | "titleCard"
+  | "lowerThird"
+  | "badge"
+  | "ctaButton"
+  | "bigNumber"
+  | "animatedList"
+  | "typewriterText"
+  | "highlightText"
+  | "countUpNumber"
+  | "orbitingIcons";
 
 export interface TemplateDef {
   id: TemplateId;
@@ -18,6 +28,10 @@ export const MOTION_TEMPLATES: TemplateDef[] = [
   { id: "ctaButton", label: "CTA Button", description: "Call-to-action pill with a looping pulse" },
   { id: "bigNumber", label: "Big Number", description: "A number that pops in large, for stats" },
   { id: "animatedList", label: "Animated List", description: "List items that appear one after another" },
+  { id: "typewriterText", label: "Typewriter", description: "Text that types itself on, character by character" },
+  { id: "highlightText", label: "Highlighted Text", description: "A line of text with one [word] in a different color" },
+  { id: "countUpNumber", label: "Count-Up Number", description: "A number that counts up from 0 to its target" },
+  { id: "orbitingIcons", label: "Orbiting Icons", description: "Icons circling smoothly around a center product" },
 ];
 
 function titleCard(comp: Composition): Layer[] {
@@ -165,6 +179,106 @@ function animatedList(comp: Composition): Layer[] {
   });
 }
 
+function typewriterText(comp: Composition): Layer[] {
+  const cx = comp.width / 2;
+  const cy = comp.height / 2;
+  const text = makeText(comp, {
+    content: "نص سينمائي يُكتب أمام عينيك...",
+    fontSize: 46,
+    color: "#ffffff",
+    x: cx,
+    y: cy,
+    name: "Typewriter Text",
+  });
+  text.props = { ...(text.props as TextLayerProps), revealSpeed: 14 };
+  return [text];
+}
+
+function highlightText(comp: Composition): Layer[] {
+  const cx = comp.width / 2;
+  const cy = comp.height / 2;
+  let text = makeText(comp, {
+    content: "اختر [منصة بناء] متكاملة لمشروعك",
+    fontSize: 50,
+    color: "#ffffff",
+    x: cx,
+    y: cy,
+    name: "Highlighted Text",
+  });
+  text.props = { ...(text.props as TextLayerProps), emphasisColor: "#ffd166" };
+  text = applyPresetToLayer(applyPresetToLayer(text, "fadeIn", comp), "slideInTop", comp);
+  return [text];
+}
+
+function countUpNumber(comp: Composition): Layer[] {
+  const cx = comp.width / 2;
+  const cy = comp.height / 2;
+  const number = makeText(comp, {
+    content: "0",
+    fontSize: 150,
+    color: "#ffffff",
+    x: cx,
+    y: cy,
+    name: "Count Up Number",
+  });
+  number.props = { ...(number.props as TextLayerProps), countTo: 100, countDuration: 1.8 };
+  let label = makeText(comp, {
+    content: "عميل سعيد",
+    fontSize: 28,
+    color: "#9a9aa2",
+    x: cx,
+    y: cy + 100,
+    startTime: 0.2,
+    name: "Count Label",
+  });
+  label = applyPresetToLayer(label, "fadeIn", comp);
+  return [label, number];
+}
+
+/** Replaces a layer's position keyframes with a smooth circular orbit around `center`, looping for `loops` revolutions. */
+function addOrbitLoop(layer: Layer, center: Point, radius: number, period: number, phase: number, loops: number): Layer {
+  const stepsPerLoop = 16;
+  const kfs: Keyframe<Point>[] = [];
+  for (let i = 0; i <= stepsPerLoop * loops; i++) {
+    const time = layer.startTime + (i / stepsPerLoop) * period;
+    const angle = phase + (i / stepsPerLoop) * Math.PI * 2;
+    kfs.push({
+      id: makeId("kf"),
+      time,
+      value: { x: center.x + Math.cos(angle) * radius, y: center.y + Math.sin(angle) * radius },
+      easing: "linear",
+    });
+  }
+  return {
+    ...layer,
+    transform: { ...layer.transform, position: { static: layer.transform.position.static, keyframes: kfs } },
+  };
+}
+
+function orbitingIcons(comp: Composition): Layer[] {
+  const cx = comp.width / 2;
+  const cy = comp.height / 2;
+  const icons = ["⭐", "💡", "🔥", "❤️"];
+  const radius = Math.min(comp.width, comp.height) * 0.3;
+  const period = 6;
+  const orbitLayers = icons.map((icon, i) => {
+    let layer = makeText(comp, {
+      content: icon,
+      fontSize: 52,
+      color: "#ffffff",
+      x: cx,
+      y: cy,
+      name: `Orbit Icon ${i + 1}`,
+    });
+    layer = applyPresetToLayer(layer, "popIn", comp);
+    const phase = (i / icons.length) * Math.PI * 2;
+    return addOrbitLoop(layer, { x: cx, y: cy }, radius, period, phase, 4);
+  });
+  let center = makeImage(comp, { width: radius * 0.85, height: radius * 0.85, x: cx, y: cy, name: "Center Product" });
+  center = applyPresetToLayer(center, "popIn", comp);
+  return [...orbitLayers, center];
+}
+
 export function buildTemplateLayers(templateId: TemplateId, comp: Composition): Layer[] {
   switch (templateId) {
     case "titleCard":
@@ -179,5 +293,13 @@ export function buildTemplateLayers(templateId: TemplateId, comp: Composition): 
       return bigNumber(comp);
     case "animatedList":
       return animatedList(comp);
+    case "typewriterText":
+      return typewriterText(comp);
+    case "highlightText":
+      return highlightText(comp);
+    case "countUpNumber":
+      return countUpNumber(comp);
+    case "orbitingIcons":
+      return orbitingIcons(comp);
   }
 }

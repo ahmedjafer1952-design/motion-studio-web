@@ -34,14 +34,19 @@ export type LayerType =
   | "video"
   | "audio"
   | "caption"
-  | "glass";
+  | "glass"
+  | "overlay";
 
 export interface TextLayerProps {
-  content: string;
+  content: string; // wrap a word in [brackets] to render it in emphasisColor
   fontSize: number;
   color: string;
   fontFamily: string;
   align: "left" | "center" | "right";
+  emphasisColor?: string; // color for [bracketed] words in content
+  revealSpeed?: number; // chars/sec — types content on progressively, like a typewriter
+  countTo?: number; // when set, content is replaced by a 0 → countTo counter
+  countDuration?: number; // seconds the count-up takes
 }
 
 export interface ShapeLayerProps {
@@ -121,6 +126,15 @@ export interface GlassLayerProps {
   borderColor: string;
 }
 
+export type OverlayEffect = "grain" | "vhs" | "vignette" | "scanlines";
+
+export interface OverlayLayerProps {
+  effect: OverlayEffect;
+  intensity: number; // 0..1
+  width: number;
+  height: number;
+}
+
 export interface Layer {
   id: string;
   name: string;
@@ -137,7 +151,8 @@ export interface Layer {
     | VideoLayerProps
     | AudioLayerProps
     | CaptionLayerProps
-    | GlassLayerProps;
+    | GlassLayerProps
+    | OverlayLayerProps;
 }
 
 export type ColorGradeId =
