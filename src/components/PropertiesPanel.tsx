@@ -639,6 +639,7 @@ function CaptionFields({
               <option value="karaokeLine">Karaoke line (highlight as spoken)</option>
               <option value="pillWord">Pill / glass badge</option>
               <option value="emphasisOnly">Line + emphasis only</option>
+              <option value="buildUp">Build-up (words accumulate as spoken)</option>
             </select>
           </label>
           <div className="field-row">

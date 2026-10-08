@@ -95,7 +95,7 @@ export interface AudioLayerProps {
   muted: boolean;
 }
 
-export type CaptionStyle = "bigWord" | "karaokeLine" | "pillWord" | "emphasisOnly";
+export type CaptionStyle = "bigWord" | "karaokeLine" | "pillWord" | "emphasisOnly" | "buildUp";
 
 export interface CaptionWord {
   id: string;

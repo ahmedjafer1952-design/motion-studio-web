@@ -21,8 +21,9 @@ account, no upload.
   `@xenova/transformers`, no server/upload), word-level timestamps, Arabic
   language hint. Correct any word afterwards — timestamps stay put. Star a
   word to emphasize it (color + highlight), the equivalent of wrapping it in
-  `[brackets]`. 4 caption styles: big word, karaoke line, pill/glass badge,
-  line + emphasis-only. Proper RTL layout for Arabic text.
+  `[brackets]`. 5 caption styles: big word, karaoke line, pill/glass badge,
+  line + emphasis-only, and build-up (words accumulate as spoken). Proper
+  RTL layout for Arabic text.
 - **Motion library panel** (📚 المكتبة): a browsable, categorized library —
   an icon rail (text & titles, captions, capsules/buttons, lists, faceless
   scenes, stickers & motion, color grading, sound library, elements,
@@ -31,8 +32,9 @@ account, no upload.
   placeholder) — the same `renderComposition()` preview/export share — so
   what you see is exactly what you get. Covers the Title Card / Lower Third
   / Badge / CTA Button / Big Number / Animated List / Typewriter /
-  Highlighted-Text / Count-Up-Number templates, all 4 caption styles (with a
-  sample sentence), all 24 faceless scenes (a real-rendered thumbnail per
+  Highlighted-Text / Count-Up-Number / Stat Card / Comparison Card
+  templates, all 5 caption styles (with a sample sentence), all 24 faceless
+  scenes (a real-rendered thumbnail per
   color variant, not a flat swatch), orbiting icons, 8 animated emoji
   stickers, 4 overlay effects, shapes/glass, a 19-sound synthesized SFX
   library, and the color-grade looks — plus 14 **motion presets**

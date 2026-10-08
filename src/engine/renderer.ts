@@ -377,6 +377,24 @@ function drawCaption(ctx: CanvasRenderingContext2D, p: CaptionLayerProps, t: num
     return;
   }
 
+  if (p.style === "buildUp") {
+    const spoken = line.filter((w) => t >= w.start - 0.02);
+    if (spoken.length === 0) return;
+    const gap = p.fontSize * 0.28;
+    const widths = spoken.map((w) => ctx.measureText(w.text).width);
+    const totalWidth = widths.reduce((a, b) => a + b, 0) + gap * (spoken.length - 1);
+    let x = totalWidth / 2;
+    ctx.textAlign = "right";
+    for (let i = 0; i < spoken.length; i++) {
+      const w = spoken[i];
+      const isActive = t >= w.start && t <= w.end;
+      ctx.fillStyle = isActive || w.emphasis ? p.emphasisColor : p.color;
+      ctx.fillText(w.text, x, 0);
+      x -= widths[i] + gap;
+    }
+    return;
+  }
+
   // karaokeLine and emphasisOnly: lay out the whole line, right-to-left (Arabic reading order).
   const gap = p.fontSize * 0.28;
   const widths = line.map((w) => ctx.measureText(w.text).width);

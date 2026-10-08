@@ -13,7 +13,9 @@ export type TemplateId =
   | "typewriterText"
   | "highlightText"
   | "countUpNumber"
-  | "orbitingIcons";
+  | "orbitingIcons"
+  | "statCard"
+  | "comparisonCard";
 
 export interface TemplateDef {
   id: TemplateId;
@@ -32,6 +34,8 @@ export const MOTION_TEMPLATES: TemplateDef[] = [
   { id: "highlightText", label: "Highlighted Text", description: "A line of text with one [word] in a different color" },
   { id: "countUpNumber", label: "Count-Up Number", description: "A number that counts up from 0 to its target" },
   { id: "orbitingIcons", label: "Orbiting Icons", description: "Icons circling smoothly around a center product" },
+  { id: "statCard", label: "Stat Card", description: "Icon + number + label inside a boxed card" },
+  { id: "comparisonCard", label: "Comparison Card", description: "Two numbers side by side — before / after" },
 ];
 
 function titleCard(comp: Composition): Layer[] {
@@ -279,6 +283,99 @@ function orbitingIcons(comp: Composition): Layer[] {
   return [...orbitLayers, center];
 }
 
+function statCard(comp: Composition): Layer[] {
+  const cx = comp.width / 2;
+  const cy = comp.height / 2;
+  const cardW = 320;
+  const cardH = 220;
+  let card = makeRect(comp, { width: cardW, height: cardH, color: "#1d1d22", radius: 20, x: cx, y: cy, name: "Stat Card" });
+  let icon = makeText(comp, {
+    content: "📈",
+    fontSize: 48,
+    color: "#ffffff",
+    x: cx,
+    y: cy - cardH * 0.28,
+    startTime: 0.1,
+    name: "Stat Icon",
+  });
+  let number = makeText(comp, {
+    content: "250",
+    fontSize: 64,
+    color: "#ffd166",
+    x: cx,
+    y: cy + cardH * 0.02,
+    startTime: 0.2,
+    name: "Stat Number",
+  });
+  let label = makeText(comp, {
+    content: "عملية ناجحة",
+    fontSize: 22,
+    color: "#9a9aa2",
+    x: cx,
+    y: cy + cardH * 0.33,
+    startTime: 0.3,
+    name: "Stat Label",
+  });
+  card = applyPresetToLayer(card, "popIn", comp);
+  icon = applyPresetToLayer(icon, "fadeIn", comp);
+  number = applyPresetToLayer(number, "popIn", comp);
+  label = applyPresetToLayer(label, "fadeIn", comp);
+  return [label, number, icon, card];
+}
+
+function comparisonCard(comp: Composition): Layer[] {
+  const cx = comp.width / 2;
+  const cy = comp.height / 2;
+  const cardW = 520;
+  const cardH = 220;
+  const colOffset = cardW * 0.27;
+  let card = makeRect(comp, { width: cardW, height: cardH, color: "#1d1d22", radius: 20, x: cx, y: cy, name: "Comparison Card" });
+  let divider = makeRect(comp, { width: 2, height: cardH * 0.6, color: "#35353b", x: cx, y: cy, name: "Divider" });
+  let leftNum = makeText(comp, {
+    content: "40%",
+    fontSize: 52,
+    color: "#ff6b6b",
+    x: cx - colOffset,
+    y: cy - 10,
+    startTime: 0.15,
+    name: "Left Number",
+  });
+  let leftLabel = makeText(comp, {
+    content: "قبل",
+    fontSize: 20,
+    color: "#9a9aa2",
+    x: cx - colOffset,
+    y: cy + 46,
+    startTime: 0.2,
+    name: "Left Label",
+  });
+  let rightNum = makeText(comp, {
+    content: "95%",
+    fontSize: 52,
+    color: "#7cff8a",
+    x: cx + colOffset,
+    y: cy - 10,
+    startTime: 0.3,
+    name: "Right Number",
+  });
+  let rightLabel = makeText(comp, {
+    content: "بعد",
+    fontSize: 20,
+    color: "#9a9aa2",
+    x: cx + colOffset,
+    y: cy + 46,
+    startTime: 0.35,
+    name: "Right Label",
+  });
+  card = applyPresetToLayer(card, "popIn", comp);
+  divider = applyPresetToLayer(divider, "fadeIn", comp);
+  leftNum = applyPresetToLayer(leftNum, "popIn", comp);
+  leftLabel = applyPresetToLayer(leftLabel, "fadeIn", comp);
+  rightNum = applyPresetToLayer(rightNum, "popIn", comp);
+  rightLabel = applyPresetToLayer(rightLabel, "fadeIn", comp);
+  return [rightLabel, rightNum, leftLabel, leftNum, divider, card];
+}
+
 export function buildTemplateLayers(templateId: TemplateId, comp: Composition): Layer[] {
   switch (templateId) {
     case "titleCard":
@@ -301,5 +398,9 @@ export function buildTemplateLayers(templateId: TemplateId, comp: Composition): 
       return countUpNumber(comp);
     case "orbitingIcons":
       return orbitingIcons(comp);
+    case "statCard":
+      return statCard(comp);
+    case "comparisonCard":
+      return comparisonCard(comp);
   }
 }
