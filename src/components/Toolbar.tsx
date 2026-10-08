@@ -82,6 +82,7 @@ export function Toolbar() {
         <button onClick={() => addLayer("rect")}>▭ Rect</button>
         <button onClick={() => addLayer("ellipse")}>◯ Ellipse</button>
         <button onClick={() => addLayer("image")}>🖼 Image</button>
+        <button onClick={() => addLayer("video")}>🎬 Video</button>
       </div>
 
       <div className="toolbar-group">

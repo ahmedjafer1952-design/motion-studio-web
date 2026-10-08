@@ -1,5 +1,5 @@
 import type { Composition } from "../types";
-import { preloadImages, renderComposition } from "./renderer";
+import { preloadImages, preloadVideos, renderComposition, resetVideoLayers } from "./renderer";
 
 const CANDIDATE_MIME_TYPES = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
 
@@ -18,7 +18,8 @@ export async function exportCompositionToVideo(
     throw new Error("This browser does not support in-browser video recording (MediaRecorder).");
   }
 
-  await preloadImages(comp);
+  await Promise.all([preloadImages(comp), preloadVideos(comp)]);
+  resetVideoLayers(comp);
 
   const canvas = document.createElement("canvas");
   canvas.width = comp.width;
@@ -27,7 +28,7 @@ export async function exportCompositionToVideo(
   if (!ctx) throw new Error("Could not create a 2D rendering context for export.");
 
   // Render the first frame before capturing so the stream starts with real content.
-  renderComposition(ctx, comp, 0);
+  renderComposition(ctx, comp, 0, { playing: false });
 
   const stream = (canvas as HTMLCanvasElement & { captureStream: (fps?: number) => MediaStream }).captureStream(
     comp.fps
@@ -43,6 +44,7 @@ export async function exportCompositionToVideo(
     recorder.onerror = (e) => reject(e);
     recorder.onstop = () => {
       stream.getTracks().forEach((t) => t.stop());
+      resetVideoLayers(comp);
       resolve(new Blob(chunks, { type: mimeType }));
     };
 
@@ -52,7 +54,7 @@ export async function exportCompositionToVideo(
     const frame = () => {
       const elapsed = (performance.now() - startTs) / 1000;
       const t = Math.min(elapsed, comp.duration);
-      renderComposition(ctx, comp, t);
+      renderComposition(ctx, comp, t, { playing: true });
       onProgress?.(t / comp.duration);
       if (elapsed < comp.duration) {
         requestAnimationFrame(frame);

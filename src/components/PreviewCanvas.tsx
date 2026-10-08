@@ -14,14 +14,14 @@ export function PreviewCanvas() {
   const rafRef = useRef<number | null>(null);
   const lastTsRef = useRef<number | null>(null);
 
-  // Draw whenever composition or playhead changes (covers paused scrubbing + edits).
+  // Draw whenever composition, playhead, or play state changes (covers paused scrubbing + edits).
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    renderComposition(ctx, comp, playhead);
-  }, [comp, playhead]);
+    renderComposition(ctx, comp, playhead, { playing: isPlaying });
+  }, [comp, playhead, isPlaying]);
 
   // Playback loop.
   useEffect(() => {

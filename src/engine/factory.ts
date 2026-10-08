@@ -39,6 +39,8 @@ function defaultProps(type: LayerType): Layer["props"] {
       return { width: 220, height: 220, color: "#ff6b6b" } as ShapeLayerProps;
     case "image":
       return { src: "", width: 300, height: 300 };
+    case "video":
+      return { src: "", fileName: "", width: 640, height: 360, trimIn: 0, naturalDuration: 0, muted: true };
   }
 }
 

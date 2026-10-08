@@ -1,4 +1,12 @@
-import type { AnimatablePropKey, Easing, ImageLayerProps, Point, ShapeLayerProps, TextLayerProps } from "../types";
+import type {
+  AnimatablePropKey,
+  Easing,
+  ImageLayerProps,
+  Point,
+  ShapeLayerProps,
+  TextLayerProps,
+  VideoLayerProps,
+} from "../types";
 import { useEditorStore } from "../state/store";
 import { evaluateTransform } from "../engine/evaluate";
 import { PROPERTY_COLORS } from "./Timeline/constants";
@@ -160,6 +168,15 @@ export function PropertiesPanel() {
         {layer.type === "image" && (
           <ImageFields props={layer.props as ImageLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
         )}
+        {layer.type === "video" && (
+          <VideoFields
+            props={layer.props as VideoLayerProps}
+            onChange={(p) => updateLayerProps(layer.id, p)}
+            onFitDuration={(naturalDuration, trimIn) =>
+              updateLayerTiming(layer.id, layer.startTime, layer.startTime + Math.max(0.1, naturalDuration - trimIn))
+            }
+          />
+        )}
       </div>
 
       <div className="properties-section">
@@ -249,6 +266,75 @@ function ShapeFields({ props: p, onChange }: { props: ShapeLayerProps; onChange:
           </label>
         )}
       </div>
+    </>
+  );
+}
+
+function VideoFields({
+  props: p,
+  onChange,
+  onFitDuration,
+}: {
+  props: VideoLayerProps;
+  onChange: (p: Partial<VideoLayerProps>) => void;
+  onFitDuration: (naturalDuration: number, trimIn: number) => void;
+}) {
+  const handleFile = (file: File) => {
+    const src = URL.createObjectURL(file);
+    const probe = document.createElement("video");
+    probe.preload = "metadata";
+    probe.onloadedmetadata = () => {
+      onChange({
+        src,
+        fileName: file.name,
+        width: probe.videoWidth || p.width,
+        height: probe.videoHeight || p.height,
+        trimIn: 0,
+        naturalDuration: probe.duration || 0,
+      });
+    };
+    probe.src = src;
+  };
+  return (
+    <>
+      <label className="field">
+        <span>Video file (mp4, webm…)</span>
+        <input type="file" accept="video/*" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+      </label>
+      {p.src && (
+        <p className="hint">
+          {p.fileName || "video"} · source length {p.naturalDuration.toFixed(2)}s
+          <br />
+          <button type="button" className="link-btn" onClick={() => onFitDuration(p.naturalDuration, p.trimIn)}>
+            fit layer duration to clip
+          </button>
+        </p>
+      )}
+      <div className="field-row">
+        <label className="field">
+          <span>Width</span>
+          <input type="number" value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
+        </label>
+        <label className="field">
+          <span>Height</span>
+          <input type="number" value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
+        </label>
+      </div>
+      <label className="field">
+        <span>Trim in (s into source clip)</span>
+        <input
+          type="number"
+          step={0.1}
+          min={0}
+          max={p.naturalDuration || undefined}
+          value={p.trimIn}
+          onChange={(e) => onChange({ trimIn: parseFloat(e.target.value) || 0 })}
+        />
+      </label>
+      <p className="hint">
+        Video is session-only: it isn't saved inside the project JSON. Re-add the file after reloading the page.
+        Export currently has no audio.
+      </p>
     </>
   );
 }

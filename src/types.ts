@@ -24,7 +24,7 @@ export interface LayerTransform {
   opacity: AnimatedProperty<number>; // 0..1
 }
 
-export type LayerType = "text" | "rect" | "ellipse" | "image";
+export type LayerType = "text" | "rect" | "ellipse" | "image" | "video";
 
 export interface TextLayerProps {
   content: string;
@@ -47,6 +47,16 @@ export interface ImageLayerProps {
   height: number;
 }
 
+export interface VideoLayerProps {
+  src: string; // object URL (session-only — not persisted across reloads)
+  fileName: string;
+  width: number;
+  height: number;
+  trimIn: number; // seconds into the source video where playback starts
+  naturalDuration: number; // source video's own duration, seconds
+  muted: boolean;
+}
+
 export interface Layer {
   id: string;
   name: string;
@@ -54,7 +64,7 @@ export interface Layer {
   startTime: number; // seconds
   endTime: number; // seconds
   transform: LayerTransform;
-  props: TextLayerProps | ShapeLayerProps | ImageLayerProps;
+  props: TextLayerProps | ShapeLayerProps | ImageLayerProps | VideoLayerProps;
 }
 
 export interface Composition {
