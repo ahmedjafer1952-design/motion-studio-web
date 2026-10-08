@@ -14,6 +14,8 @@ import { evaluateTransform } from "../engine/evaluate";
 import { applyPresetToLayer, type PresetId } from "../engine/presets";
 import { buildTemplateLayers, type TemplateId } from "../engine/templates";
 import { buildScene, type SceneId } from "../engine/scenes";
+import { buildAutoEdit, type AutoEditOptions } from "../engine/autoEdit";
+import type { TranscribedWord } from "../engine/transcribe";
 import { makeId } from "../utils/id";
 
 const MAX_HISTORY = 100;
@@ -46,6 +48,7 @@ interface EditorState {
   applyMotionPreset: (layerId: string, presetId: PresetId) => void;
   applyTemplate: (templateId: TemplateId) => void;
   applyScene: (sceneId: SceneId) => void;
+  applyAutoEdit: (sourceLayerId: string, words: TranscribedWord[], opts: AutoEditOptions) => void;
 
   setPlayhead: (time: number) => void;
   play: () => void;
@@ -202,6 +205,25 @@ export const useEditorStore = create<EditorState>((set, get) => {
           composition: { ...p.composition, backgroundColor, layers: [...layers, ...p.composition.layers] },
         }),
         { selectedLayerId: layers[0]?.id ?? null }
+      );
+    },
+
+    applyAutoEdit: (sourceLayerId, words, opts) => {
+      const comp = get().project.composition;
+      const sourceLayer = comp.layers.find((l) => l.id === sourceLayerId);
+      if (!sourceLayer) return;
+      const srcProps = sourceLayer.props as { trimIn: number };
+      const { newLayers, updatedSourceLayer, compPatch } = buildAutoEdit(comp, sourceLayer, words, srcProps.trimIn, opts);
+      commit(
+        (p) => ({
+          ...p,
+          composition: {
+            ...p.composition,
+            ...compPatch,
+            layers: [...newLayers, ...p.composition.layers.map((l) => (l.id === sourceLayerId ? updatedSourceLayer : l))],
+          },
+        }),
+        { selectedLayerId: newLayers[0]?.id ?? null }
       );
     },
 

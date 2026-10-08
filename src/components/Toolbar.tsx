@@ -1,10 +1,11 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useEditorStore } from "../state/store";
 import type { Project } from "../types";
 import { downloadBlob } from "../utils/download";
 import { exportCompositionToVideo } from "../engine/export";
 import { MOTION_TEMPLATES, type TemplateId } from "../engine/templates";
 import { FACELESS_SCENES, type SceneId } from "../engine/scenes";
+import { AutoEditDialog } from "./AutoEditDialog";
 
 function formatTime(t: number): string {
   const m = Math.floor(t / 60);
@@ -30,6 +31,7 @@ export function Toolbar() {
   const canRedo = useEditorStore((s) => s.future.length > 0);
   const applyTemplate = useEditorStore((s) => s.applyTemplate);
   const applyScene = useEditorStore((s) => s.applyScene);
+  const [autoEditOpen, setAutoEditOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -165,10 +167,15 @@ export function Toolbar() {
       </div>
 
       <div className="toolbar-group toolbar-group-end">
+        <button onClick={() => setAutoEditOpen(true)} title="Automatically assemble a first edit from speech">
+          ✨ Auto Edit
+        </button>
         <button className="primary" onClick={handleExport} disabled={isExporting}>
           {isExporting ? `Exporting ${Math.round(exportProgress * 100)}%…` : "⬇ Export video"}
         </button>
       </div>
+
+      {autoEditOpen && <AutoEditDialog onClose={() => setAutoEditOpen(false)} />}
     </div>
   );
 }
