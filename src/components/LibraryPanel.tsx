@@ -1,12 +1,10 @@
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 import { useEditorStore } from "../state/store";
-import {
-  LIBRARY_CATEGORIES,
-  cardsForCategory,
-  type LibraryCategoryId,
-} from "../engine/libraryCatalog";
+import { LIBRARY_CATEGORIES, cardsForCategory, type LibraryCategoryId } from "../engine/libraryCatalog";
 import type { TemplateId } from "../engine/templates";
 import type { SceneId } from "../engine/scenes";
+import { captionPreview, elementPreview, gradeDemoPreview, scenePreview, templatePreview } from "../engine/libraryPreview";
+import { LibraryCardPreview } from "./LibraryCardPreview";
 
 export function LibraryPanel({
   onClose,
@@ -22,7 +20,8 @@ export function LibraryPanel({
   const addLayer = useEditorStore((s) => s.addLayer);
   const addLayerWithProps = useEditorStore((s) => s.addLayerWithProps);
   const updateComposition = useEditorStore((s) => s.updateComposition);
-  const activeGrade = useEditorStore((s) => s.project.composition.colorGrade ?? "none");
+  const comp = useEditorStore((s) => s.project.composition);
+  const activeGrade = comp.colorGrade ?? "none";
 
   const flash = (id: string) => {
     setFlashId(id);
@@ -31,6 +30,8 @@ export function LibraryPanel({
 
   const cards = cardsForCategory(category);
   const activeCat = LIBRARY_CATEGORIES.find((c) => c.id === category)!;
+  const pw = comp.width;
+  const ph = comp.height;
 
   return (
     <div className="library-overlay" onClick={onClose}>
@@ -57,11 +58,8 @@ export function LibraryPanel({
                       flash(card.id);
                     }}
                   >
-                    <div
-                      className="library-card-preview"
-                      style={{ background: `linear-gradient(135deg, ${card.swatch[0]}, ${card.swatch[1]})` }}
-                    >
-                      <span>{card.label}</span>
+                    <div className="library-card-preview">
+                      <LibraryCardPreview scene={templatePreview(card.id, comp)} width={pw} height={ph} />
                     </div>
                     <div className="library-card-label">{card.label}</div>
                     <div className="library-card-desc">{card.description}</div>
@@ -78,11 +76,8 @@ export function LibraryPanel({
                       flash(card.id);
                     }}
                   >
-                    <div
-                      className="library-card-preview"
-                      style={{ background: `linear-gradient(135deg, ${card.swatch[0]}, ${card.swatch[1]})` }}
-                    >
-                      <span>💬</span>
+                    <div className="library-card-preview">
+                      <LibraryCardPreview scene={captionPreview(card.id, comp)} width={pw} height={ph} />
                     </div>
                     <div className="library-card-label">{card.label}</div>
                     <div className="library-card-desc">{card.description}</div>
@@ -99,11 +94,8 @@ export function LibraryPanel({
                       flash(card.id);
                     }}
                   >
-                    <div
-                      className="library-card-preview"
-                      style={{ background: `linear-gradient(135deg, ${card.swatch[0]}, ${card.swatch[1]})` }}
-                    >
-                      <span>{card.label}</span>
+                    <div className="library-card-preview">
+                      <LibraryCardPreview scene={elementPreview(card.layerType, comp)} width={pw} height={ph} />
                     </div>
                     <div className="library-card-label">{card.label}</div>
                     <div className="library-card-desc">{card.description}</div>
@@ -113,11 +105,12 @@ export function LibraryPanel({
               if (card.kind === "sceneGroup") {
                 return (
                   <div key={card.type} className="library-card library-card-scene">
-                    <div
-                      className="library-card-preview"
-                      style={{ background: `linear-gradient(135deg, ${card.variants[0]?.dot ?? "#333"}, #1b1b1e)` }}
-                    >
-                      <span>🎭</span>
+                    <div className="library-card-preview">
+                      <LibraryCardPreview
+                        scene={scenePreview(card.variants[0].id, comp)}
+                        width={pw}
+                        height={ph}
+                      />
                     </div>
                     <div className="library-card-label">{card.label}</div>
                     <div className="library-card-desc">{card.description}</div>
@@ -125,14 +118,15 @@ export function LibraryPanel({
                       {card.variants.map((v, i) => (
                         <button
                           key={v.id}
-                          className={`variant-dot ${flashId === v.id ? "flash" : ""}`}
-                          style={{ background: v.dot }}
+                          className={`variant-thumb ${flashId === v.id ? "flash" : ""}`}
                           title={`تنويع ${i + 1}`}
                           onClick={() => {
                             applyScene(v.id as SceneId);
                             flash(v.id);
                           }}
-                        />
+                        >
+                          <LibraryCardPreview scene={scenePreview(v.id, comp)} width={pw} height={ph} />
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -149,20 +143,13 @@ export function LibraryPanel({
                       flash(card.id);
                     }}
                   >
-                    <div className="library-card-preview grade-preview">
-                      <div className="grade-base" style={{ filter: card.filter }} />
-                      {card.tint && (
-                        <div
-                          className="grade-tint"
-                          style={
-                            {
-                              backgroundColor: card.tint.color,
-                              opacity: card.tint.alpha * 2.2,
-                              mixBlendMode: card.tint.blend,
-                            } as CSSProperties
-                          }
-                        />
-                      )}
+                    <div className="library-card-preview">
+                      <LibraryCardPreview
+                        scene={gradeDemoPreview(comp)}
+                        width={pw}
+                        height={ph}
+                        colorGrade={card.id}
+                      />
                       {isActive && <span className="grade-active-badge">✓</span>}
                     </div>
                     <div className="library-card-label">{card.label}</div>

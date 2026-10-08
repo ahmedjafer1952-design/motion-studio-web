@@ -527,17 +527,21 @@ textarea {
   box-shadow: 0 0 0 1px var(--accent);
 }
 .library-card-preview {
+  position: relative;
   height: 90px;
   border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   color: #fff;
   font-weight: 600;
   font-size: 13px;
   text-align: center;
-  padding: 6px;
   overflow: hidden;
+  background: #0f0f11;
+}
+.library-card-canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 .library-card-label {
   font-size: 13px;
@@ -551,20 +555,10 @@ textarea {
   cursor: default;
 }
 
-.grade-preview {
-  position: relative;
-}
-.grade-base {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, #ffcf6b 0%, #ff8a3d 25%, #4f8cff 60%, #1b1b1e 100%);
-}
-.grade-tint {
-  position: absolute;
-  inset: 0;
-}
 .grade-active-badge {
-  position: relative;
+  position: absolute;
+  top: 6px;
+  left: 6px;
   z-index: 1;
   background: var(--accent);
   color: #fff;
@@ -581,20 +575,28 @@ textarea {
   gap: 6px;
   margin-top: 2px;
 }
-.variant-dot {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
+.variant-thumb {
+  width: 50px;
+  height: 30px;
+  border-radius: 4px;
   border: 2px solid var(--border);
   padding: 0;
   cursor: pointer;
+  overflow: hidden;
+  background: #0f0f11;
 }
-.variant-dot:hover {
+.variant-thumb canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.variant-thumb:hover {
   border-color: var(--accent);
 }
-.variant-dot.flash {
+.variant-thumb.flash {
   border-color: #7cff8a;
-  transform: scale(1.15);
+  transform: scale(1.08);
 }
 
 .library-rail {

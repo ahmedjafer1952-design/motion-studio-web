@@ -23,10 +23,14 @@ account, no upload.
   line + emphasis-only. Proper RTL layout for Arabic text.
 - **Motion library panel** (📚 المكتبة): a browsable, categorized library —
   an icon rail (text & titles, captions, capsules/buttons, lists, faceless
-  scenes, elements, Auto Edit) next to a grid of preview cards, click to
-  insert. Covers the Title Card / Lower Third / Badge / CTA Button / Big
-  Number / Animated List templates, all 4 caption styles, all 24 faceless
-  scenes (color-variant dots per scene), and shapes/glass — plus 10 **motion
+  scenes, color grading, elements, Auto Edit) next to a grid of cards, click
+  to insert. Every card renders a **real accurate frame through the actual
+  engine** (not a mockup/placeholder) — the same `renderComposition()`
+  preview/export share — so what you see is exactly what you get. Covers
+  the Title Card / Lower Third / Badge / CTA Button / Big Number / Animated
+  List templates, all 4 caption styles (with a sample sentence), all 24
+  faceless scenes (a real-rendered thumbnail per color variant, not a flat
+  swatch), shapes/glass, and the color-grade looks — plus 10 **motion
   presets** (fade/zoom/slide/pop/pan) you can apply to *any* layer from its
   properties panel to animate it in or out.
 - **Cinematic color grading**: 10 whole-composition "looks" (Teal & Orange,
@@ -108,13 +112,17 @@ src/
                                 # placeholder compositions, 6 types × 4 colors
     autoEdit.ts                 # rule-based speech analysis (lists, numbers,
                                  # emphasis, pauses) + assembles a first cut
+    libraryPreview.ts            # builds the sample layers each library
+                                  # card previews, per category
   state/
     store.ts            # Zustand store: project state, undo/redo, actions
   components/
     Toolbar.tsx          # add layer, undo/redo, library, Auto Edit,
                           # play/pause, save/load, export
     LibraryPanel.tsx      # browsable library: category rail + preview-card
-                           # grid (templates, captions, scenes, elements)
+                           # grid (templates, captions, scenes, grades, elements)
+    LibraryCardPreview.tsx # renders one real accurate frame per card via
+                            # renderComposition — WYSIWYG, not a mockup
     AutoEditDialog.tsx   # Auto Edit's source/pace/title/CTA config modal
     PreviewCanvas.tsx    # live canvas preview + playback loop
     PropertiesPanel.tsx  # per-layer content + animatable transform editor
