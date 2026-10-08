@@ -83,7 +83,7 @@ export async function requestClaudeEdit(client: Anthropic, req: AiEditRequest): 
       messages: [{ role: "user", content: buildEditUserMessage(req) }],
     });
   } catch (err) {
-    if (err instanceof Anthropic.AuthenticationError) throw new AiEditError("The Claude API key is invalid.", 401);
+    if (err instanceof Anthropic.AuthenticationError) throw new AiEditError("The Claude API key is invalid — Anthropic rejected it. Paste a fresh key from console.anthropic.com → API Keys.", 401);
     if (err instanceof Anthropic.PermissionDeniedError) throw new AiEditError("This API key can't use this model.", 403);
     if (err instanceof Anthropic.RateLimitError) throw new AiEditError("Claude is busy (rate limit) — try again in a minute.", 429);
     if (err instanceof Anthropic.BadRequestError) throw new AiEditError(`Claude rejected the request: ${err.message}`, 400);

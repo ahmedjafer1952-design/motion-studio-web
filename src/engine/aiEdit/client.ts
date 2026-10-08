@@ -31,7 +31,9 @@ function write(key: string, value: string) {
 
 export const aiSettings = {
   getApiKey: () => read(KEY_STORAGE),
-  setApiKey: (v: string) => write(KEY_STORAGE, v.trim()),
+  // Keys copied from chats or Arabic text often carry invisible characters (RTL marks, spaces,
+  // line breaks) that make Anthropic reject an otherwise valid key — keep only the key's own characters.
+  setApiKey: (v: string) => write(KEY_STORAGE, v.replace(/[^A-Za-z0-9_-]/g, "")),
   getAccessCode: () => read(CODE_STORAGE),
   setAccessCode: (v: string) => write(CODE_STORAGE, v.trim()),
 };
@@ -43,6 +45,9 @@ export const aiSettings = {
  */
 export async function fetchClaudeEdit(req: AiEditRequest): Promise<ClaudeEditOutput> {
   const apiKey = aiSettings.getApiKey();
+  if (apiKey && !apiKey.startsWith("sk-ant-")) {
+    throw new Error("The saved key doesn't look like a Claude API key (it should start with sk-ant-). Create one at console.anthropic.com → API Keys.");
+  }
   if (apiKey) {
     const [{ default: Anthropic }, { requestClaudeEdit, validateRequest }] = await Promise.all([
       import("@anthropic-ai/sdk"),
