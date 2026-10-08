@@ -52,6 +52,7 @@ export interface TextLayerProps {
   glow?: string; // neon glow color around the text
   outline?: boolean; // draw only the letter outlines (big hollow numbers)
   wordStagger?: number; // seconds between words springing in one after another (0/undefined = off)
+  box?: string; // label box behind the text: a color, or "glass" for a frosted pill
   highlightBar?: string; // color of a marker bar that wipes in behind the text
   stretchIn?: number; // seconds of Arabic kashida "stretch" that shrinks back as the text appears
 }
@@ -61,6 +62,7 @@ export interface ShapeLayerProps {
   height: number;
   color: string;
   radius?: number; // rect corner radius
+  softness?: number; // px of edge blur — a soft glowing blob instead of a hard shape
 }
 
 export interface PolygonLayerProps {
@@ -82,6 +84,7 @@ export interface ImageLayerProps {
   src: string; // data URL
   width: number;
   height: number;
+  fadeBottom?: number; // 0–1: fraction of the bottom edge that fades to transparent (split-screen B-roll)
 }
 
 export interface VideoLayerProps {
@@ -92,6 +95,7 @@ export interface VideoLayerProps {
   trimIn: number; // seconds into the source video where playback starts
   naturalDuration: number; // source video's own duration, seconds
   muted: boolean;
+  fadeBottom?: number; // 0–1: fraction of the bottom edge that fades to transparent (split-screen B-roll)
 }
 
 export interface AudioLayerProps {
@@ -102,7 +106,7 @@ export interface AudioLayerProps {
   muted: boolean;
 }
 
-export type CaptionStyle = "bigWord" | "karaokeLine" | "pillWord" | "emphasisOnly" | "buildUp" | "phraseStack";
+export type CaptionStyle = "bigWord" | "karaokeLine" | "pillWord" | "emphasisOnly" | "buildUp" | "phraseStack" | "glassPill";
 
 export interface CaptionWord {
   id: string;
@@ -149,7 +153,7 @@ export interface ChartLayerProps {
   height: number;
 }
 
-export type OverlayEffect = "grain" | "vhs" | "vignette" | "scanlines";
+export type OverlayEffect = "grain" | "vhs" | "vignette" | "scanlines" | "letterbox";
 
 export interface OverlayLayerProps {
   effect: OverlayEffect;

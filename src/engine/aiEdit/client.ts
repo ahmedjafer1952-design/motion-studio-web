@@ -1,11 +1,13 @@
-import type { EditPlan } from "../autoEdit";
+import type { EditPlan, KeyPhraseLook } from "../autoEdit";
+
+const KEY_LOOKS: KeyPhraseLook[] = ["neon", "box", "glass", "stretch"];
 import type { CaptionStyle, ColorGradeId } from "../../types";
 import { SOUND_LIBRARY, type SoundId } from "../sounds";
 import { COLOR_GRADES } from "../colorGrade";
 import type { TranscribedWord } from "../transcribe";
 import type { AiEditRequest, ClaudeEditOutput } from "./types";
 
-const CAPTION_STYLES: CaptionStyle[] = ["bigWord", "karaokeLine", "pillWord", "emphasisOnly", "buildUp", "phraseStack"];
+const CAPTION_STYLES: CaptionStyle[] = ["bigWord", "karaokeLine", "pillWord", "emphasisOnly", "buildUp", "phraseStack", "glassPill"];
 const SOUND_IDS = new Set<string>(SOUND_LIBRARY.map((s) => s.id));
 const GRADE_IDS = new Set<string>(COLOR_GRADES.map((g) => g.id));
 
@@ -98,7 +100,10 @@ export function planFromClaude(words: TranscribedWord[], out: ClaudeEditOutput):
     lists: out.lists
       .map((l) => ({ items: l.items.filter((it) => valid(it.atWord) && it.text.trim()).map((it) => ({ text: it.text.trim(), time: at(it.atWord) })) }))
       .filter((l) => l.items.length > 0),
-    keyPhrases: out.keyPhrases.filter((k) => valid(k.atWord) && k.text.trim()).map((k) => ({ text: k.text.trim(), time: at(k.atWord) })),
+    keyPhrases: out.keyPhrases
+      .filter((k) => valid(k.atWord) && k.text.trim())
+      .map((k) => ({ text: k.text.trim(), time: at(k.atWord), look: KEY_LOOKS.includes(k.look?.trim() as KeyPhraseLook) ? (k.look!.trim() as KeyPhraseLook) : "neon" })),
+    accent: /^#[0-9a-f]{6}$/i.test(out.accentColor?.trim() ?? "") ? out.accentColor!.trim() : null,
     zooms: out.zooms
       .filter((z) => valid(z.atWord))
       .map((z) => ({ time: at(z.atWord), strength: z.strength.trim() === "strong" ? ("strong" as const) : ("light" as const) })),

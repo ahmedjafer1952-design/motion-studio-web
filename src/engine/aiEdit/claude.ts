@@ -19,11 +19,12 @@ const wordIndex = () => z.number().int().describe("Index of a word in the transc
 const ClaudeEditSchema = z.object({
   corrections: z.array(z.object({ index: wordIndex(), text: z.string() })),
   emphasis: z.array(wordIndex()),
-  captionStyle: z.string().describe("One of: bigWord, karaokeLine, pillWord, emphasisOnly, buildUp, phraseStack"),
+  captionStyle: z.string().describe("One of: bigWord, karaokeLine, pillWord, emphasisOnly, buildUp, phraseStack, glassPill"),
   title: z.string().nullable(),
   numbers: z.array(z.object({ atWord: wordIndex(), value: z.string(), label: z.string() })),
   lists: z.array(z.object({ items: z.array(z.object({ atWord: wordIndex(), text: z.string() })) })),
-  keyPhrases: z.array(z.object({ atWord: wordIndex(), text: z.string() })),
+  keyPhrases: z.array(z.object({ atWord: wordIndex(), text: z.string(), look: z.string().describe("One of: neon, box, glass, stretch") })),
+  accentColor: z.string().describe("Brand accent color as #rrggbb"),
   zooms: z.array(z.object({ atWord: wordIndex(), strength: z.string().describe("light or strong") })),
   sounds: z.array(z.object({ atWord: wordIndex(), sound: z.string().describe(`One of: ${soundList}`) })),
   colorGrade: z.string().describe(`One of: ${gradeList}`),
@@ -66,6 +67,7 @@ export function validateRequest(raw: unknown): AiEditRequest {
       width: Number(r.frame?.width) > 0 ? Number(r.frame?.width) : 1280,
       height: Number(r.frame?.height) > 0 ? Number(r.frame?.height) : 720,
     },
+    brandColor: typeof r.brandColor === "string" && /^#[0-9a-f]{6}$/i.test(r.brandColor) ? r.brandColor : undefined,
   };
 }
 

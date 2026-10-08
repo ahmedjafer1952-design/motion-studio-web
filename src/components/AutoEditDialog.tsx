@@ -39,6 +39,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
   const [titleText, setTitleText] = useState("");
   const [includeCta, setIncludeCta] = useState(true);
   const [ctaText, setCtaText] = useState("");
+  const [brandColor, setBrandColor] = useState(""); // "" = Claude picks
   const [progress, setProgress] = useState<Phase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
@@ -95,6 +96,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
         title: { enabled: includeTitle, text: titleText },
         cta: { enabled: includeCta, text: ctaText },
         frame: { width: comp.width, height: comp.height },
+        brandColor: brandColor || undefined,
       };
       if (mode === "chat") {
         setManual({ sourceId: source.id, words, prompt: buildManualPrompt(req) });
@@ -263,6 +265,16 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
                 </select>
               </label>
             </div>
+
+            {mode !== "rules" && (
+              <div className="field-row">
+                <label className="field field-checkbox">
+                  <input type="checkbox" checked={!brandColor} onChange={(e) => setBrandColor(e.target.checked ? "" : "#6d28d9")} />
+                  <span>لون الهوية: Claude يختار</span>
+                </label>
+                {brandColor && <input type="color" value={brandColor} onChange={(e) => setBrandColor(e.target.value)} title="لون الهوية — كل التمييز والصناديق والتوهج بهذا اللون" />}
+              </div>
+            )}
 
             <div className="field-row">
               <label className="field field-checkbox">

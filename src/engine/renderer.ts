@@ -445,6 +445,14 @@ function drawText(ctx: CanvasRenderingContext2D, p: TextLayerProps, localTime: n
     if (content.length === 0) return;
   }
 
+  if (p.box) {
+    const plain = content.replace(/[[\]]/g, "");
+    const w = ctx.measureText(plain).width + p.fontSize * 0.9;
+    const h = p.fontSize * 1.45;
+    const left = p.align === "left" ? -p.fontSize * 0.45 : p.align === "right" ? -w + p.fontSize * 0.45 : -w / 2;
+    drawLabelBox(ctx, p.box, left, -h / 2, w, h, p.box === "glass" ? h / 2 : p.fontSize * 0.18);
+  }
+
   if (p.highlightBar) {
     // Marker bar wiping in behind the text (right to left, Arabic reading direction).
     const w = ctx.measureText(content.replace(/[[\]]/g, "")).width + p.fontSize * 0.5;
@@ -535,6 +543,33 @@ function drawCaption(ctx: CanvasRenderingContext2D, p: CaptionLayerProps, t: num
     return;
   }
 
+  if (p.style === "glassPill") {
+    // Short phrase inside a frosted glass pill that pops in with each new phrase.
+    const phrase = groupCaptionWordsIntoLines(p.words, 0.45, 3).find((l) => t >= l[0].start - 0.05 && t <= l[l.length - 1].end + 0.3);
+    if (!phrase) return;
+    const age = t - phrase[0].start;
+    const pop = age < 0.18 ? 0.85 + 0.15 * Math.sin((Math.max(0, age) / 0.18) * (Math.PI / 2)) : 1;
+    const gap = p.fontSize * 0.28;
+    const widths = phrase.map((w) => ctx.measureText(w.text).width);
+    const total = widths.reduce((a, b) => a + b, 0) + gap * (phrase.length - 1);
+    const bw = total + p.fontSize * 1.3;
+    const bh = p.fontSize * 1.7;
+    ctx.save();
+    ctx.scale(pop, pop);
+    drawLabelBox(ctx, "glass", -bw / 2, -bh / 2, bw, bh, bh * 0.42);
+    let x = total / 2;
+    ctx.textAlign = "right";
+    ctx.shadowColor = "rgba(0,0,0,0.45)";
+    ctx.shadowBlur = p.fontSize * 0.2;
+    phrase.forEach((w, i) => {
+      ctx.fillStyle = w.emphasis ? p.emphasisColor : p.color;
+      ctx.fillText(w.text, x, 0);
+      x -= widths[i] + gap;
+    });
+    ctx.restore();
+    return;
+  }
+
   if (p.style === "bigWord") {
     const idx = t >= p.words[0].start ? findNearestPastWordIndex(p.words, t) : -1;
     if (idx < 0) return;
@@ -617,6 +652,69 @@ function drawCaption(ctx: CanvasRenderingContext2D, p: CaptionLayerProps, t: num
  * because the blur self-sample needs raw pixel coordinates, not the rotated/scaled local
  * space the generic per-layer transform block works in.
  */
+/**
+ * Frosted glass inside the current path (given in the current local space): blurs what's
+ * already on the canvas there. The clip is captured in device space, so the self-sample is
+ * drawn with an identity transform to line up pixel for pixel.
+ */
+function frostCurrentPath(ctx: CanvasRenderingContext2D, blur: number) {
+  ctx.save();
+  ctx.clip();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.filter = `blur(${blur}px)`;
+  ctx.drawImage(ctx.canvas, 0, 0);
+  ctx.restore();
+}
+
+/** Rounded label box behind text: a solid color, or "glass" for a frosted pill with a light rim. */
+function drawLabelBox(ctx: CanvasRenderingContext2D, box: string, x: number, y: number, w: number, h: number, r: number) {
+  ctx.save();
+  ctx.shadowBlur = 0;
+  ctx.shadowColor = "transparent";
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  if (box === "glass") {
+    frostCurrentPath(ctx, 14);
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, "rgba(255,255,255,0.22)");
+    g.addColorStop(1, "rgba(255,255,255,0.06)");
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.lineWidth = Math.max(1.5, h * 0.035);
+    ctx.strokeStyle = "rgba(255,255,255,0.65)";
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = box;
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** Draws media with its bottom edge fading out, via an offscreen buffer so layers beneath stay intact. */
+let fadeBuffer: HTMLCanvasElement | null = null;
+function drawWithBottomFade(ctx: CanvasRenderingContext2D, w: number, h: number, fade: number, paint: (c: CanvasRenderingContext2D, w: number, h: number) => void) {
+  const bw = Math.max(1, Math.min(2048, Math.round(w)));
+  const bh = Math.max(1, Math.min(2048, Math.round(h)));
+  if (!fadeBuffer) fadeBuffer = document.createElement("canvas");
+  if (fadeBuffer.width !== bw || fadeBuffer.height !== bh) {
+    fadeBuffer.width = bw;
+    fadeBuffer.height = bh;
+  }
+  const c = fadeBuffer.getContext("2d");
+  if (!c) return;
+  c.globalCompositeOperation = "source-over";
+  c.clearRect(0, 0, bw, bh);
+  paint(c, bw, bh);
+  const g = c.createLinearGradient(0, bh * (1 - Math.min(1, fade)), 0, bh);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,1)");
+  c.globalCompositeOperation = "destination-out";
+  c.fillStyle = g;
+  c.fillRect(0, 0, bw, bh);
+  c.globalCompositeOperation = "source-over";
+  ctx.drawImage(fadeBuffer, -w / 2, -h / 2, w, h);
+}
+
 function drawGlassPanel(ctx: CanvasRenderingContext2D, layer: Layer, time: number) {
   if (time < layer.startTime || time > layer.endTime) return;
   const t = evaluateTransform(layer.transform, time);
@@ -660,6 +758,13 @@ function drawOverlayEffect(ctx: CanvasRenderingContext2D, p: OverlayLayerProps) 
     grad.addColorStop(1, `rgba(0,0,0,${0.7 * p.intensity})`);
     ctx.fillStyle = grad;
     ctx.fillRect(-w / 2, -h / 2, w, h);
+  }
+
+  if (p.effect === "letterbox") {
+    const bar = h * (0.06 + 0.1 * p.intensity);
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(-w / 2, -h / 2, w, bar);
+    ctx.fillRect(-w / 2, h / 2 - bar, w, bar);
   }
 
   if (p.effect === "scanlines" || p.effect === "vhs") {
@@ -728,6 +833,7 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
     case "rect": {
       const p = layer.props as ShapeLayerProps;
       ctx.fillStyle = p.color;
+      if (p.softness) ctx.filter = `blur(${p.softness}px)`;
       const r = p.radius ?? 0;
       const w = p.width;
       const h = p.height;
@@ -743,6 +849,7 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
     case "ellipse": {
       const p = layer.props as ShapeLayerProps;
       ctx.fillStyle = p.color;
+      if (p.softness) ctx.filter = `blur(${p.softness}px)`;
       ctx.beginPath();
       ctx.ellipse(0, 0, p.width / 2, p.height / 2, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -768,7 +875,8 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
       const p = layer.props as ImageLayerProps;
       const img = opts.session.getImage(p.src);
       if (img) {
-        ctx.drawImage(img, -p.width / 2, -p.height / 2, p.width, p.height);
+        if (p.fadeBottom && p.fadeBottom > 0) drawWithBottomFade(ctx, p.width, p.height, p.fadeBottom, (c, w, h) => c.drawImage(img, 0, 0, w, h));
+        else ctx.drawImage(img, -p.width / 2, -p.height / 2, p.width, p.height);
       }
       break;
     }
@@ -776,7 +884,11 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
       const p = layer.props as VideoLayerProps;
       if (!p.src) break;
       const video = opts.session.getVideo(p.src, layer.id);
-      opts.session.drawVideoFrame(ctx, video, -p.width / 2, -p.height / 2, p.width, p.height);
+      if (p.fadeBottom && p.fadeBottom > 0) {
+        drawWithBottomFade(ctx, p.width, p.height, p.fadeBottom, (c, w, h) => opts.session.drawVideoFrame(c, video, 0, 0, w, h));
+      } else {
+        opts.session.drawVideoFrame(ctx, video, -p.width / 2, -p.height / 2, p.width, p.height);
+      }
       break;
     }
     case "caption": {

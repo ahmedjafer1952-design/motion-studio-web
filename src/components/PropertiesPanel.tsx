@@ -480,6 +480,15 @@ function TextFields({ props: p, onChange }: { props: TextLayerProps; onChange: (
               <span>Outline only</span>
             </label>
           </div>
+          <label className="field">
+            <span>Label box behind text</span>
+            <select value={p.box ? (p.box === "glass" ? "glass" : "color") : ""} onChange={(e) => onChange({ box: e.target.value === "glass" ? "glass" : e.target.value === "color" ? "#6d28d9" : undefined })}>
+              <option value="">None</option>
+              <option value="color">Solid color box</option>
+              <option value="glass">Frosted glass pill</option>
+            </select>
+          </label>
+          {p.box && p.box !== "glass" && <input type="color" value={p.box} onChange={(e) => onChange({ box: e.target.value })} />}
           <div className="field-row">
             <label className="field field-checkbox">
               <input type="checkbox" checked={!!p.highlightBar} onChange={(e) => onChange({ highlightBar: e.target.checked ? "#ffd166" : undefined })} />
@@ -517,6 +526,10 @@ function ShapeFields({ props: p, onChange }: { props: ShapeLayerProps; onChange:
             <NumInput value={p.radius ?? 0} onChange={(e) => onChange({ radius: parseFloat(e.target.value) || 0 })} />
           </label>
         )}
+        <label className="field">
+          <span>Soft glow (blur px)</span>
+          <NumInput min={0} value={p.softness ?? 0} onChange={(e) => onChange({ softness: Math.max(0, parseFloat(e.target.value) || 0) || undefined })} />
+        </label>
       </div>
     </>
   );
@@ -664,6 +677,10 @@ function VideoFields({
       <label className="field field-checkbox">
         <input type="checkbox" checked={p.muted} onChange={(e) => onChange({ muted: e.target.checked })} />
         <span>Mute audio</span>
+      </label>
+      <label className="field">
+        <span>Fade bottom edge (0–1, for split-screen B-roll)</span>
+        <NumInput min={0} max={1} step={0.05} value={p.fadeBottom ?? 0} onChange={(e) => onChange({ fadeBottom: Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)) || undefined })} />
       </label>
       <p className="hint">
         The file is kept in this browser, so it survives reloads. Saved project .json files don't include it — on another device, pick it again.
@@ -923,6 +940,7 @@ function CaptionFields({
               <option value="emphasisOnly">Line + emphasis only</option>
               <option value="buildUp">Build-up (words accumulate as spoken)</option>
               <option value="phraseStack">Phrase stack (pro talking-head)</option>
+              <option value="glassPill">Glass pill (phrase in frosted glass)</option>
             </select>
           </label>
           <FontSelect value={p.fontFamily} onChange={(fontFamily) => onChange({ fontFamily })} />
@@ -1164,6 +1182,10 @@ function ImageFields({ props: p, onChange }: { props: ImageLayerProps; onChange:
           <NumInput value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
         </label>
       </div>
+      <label className="field">
+        <span>Fade bottom edge (0–1, for split-screen B-roll)</span>
+        <NumInput min={0} max={1} step={0.05} value={p.fadeBottom ?? 0} onChange={(e) => onChange({ fadeBottom: Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)) || undefined })} />
+      </label>
     </>
   );
 }

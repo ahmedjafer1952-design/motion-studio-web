@@ -21,7 +21,11 @@ export type TemplateId =
   | "markerHeadline"
   | "statHero"
   | "barChartStory"
-  | "brandReveal";
+  | "brandReveal"
+  | "infoCards"
+  | "labelBoxes"
+  | "glowCircle"
+  | "bigStretchNumber";
 
 export interface TemplateDef {
   id: TemplateId;
@@ -30,6 +34,10 @@ export interface TemplateDef {
 }
 
 export const MOTION_TEMPLATES: TemplateDef[] = [
+  { id: "infoCards", label: "Info Cards", description: "Glass cards with icons stacking in — features, specs, prices" },
+  { id: "labelBoxes", label: "Label Boxes", description: "Headline over colored boxes, line by line (poster style)" },
+  { id: "glowCircle", label: "Glow Circle", description: "Big soft color circle to sit behind the speaker" },
+  { id: "bigStretchNumber", label: "Big Number + Label", description: "Huge glowing number with a stretched label" },
   { id: "wordReveal", label: "Word Reveal", description: "Words spring up one after another" },
   { id: "markerHeadline", label: "Marker Headline", description: "A highlighter bar wipes in behind the key line" },
   { id: "statHero", label: "Stat Hero", description: "Donut sweeps to a percentage with a headline" },
@@ -443,6 +451,65 @@ function brandReveal(comp: Composition): Layer[] {
   return [name, tag, line];
 }
 
+function infoCards(comp: Composition): Layer[] {
+  const u = unitOf(comp);
+  const cx = comp.width / 2;
+  const items = [
+    { icon: "🛡️", title: "غرفتين أو أكثر", sub: "خيارات سكنية متعددة" },
+    { icon: "✅", title: "نظام سمارت هوم", sub: "تحكم كامل من موبايلك" },
+    { icon: "🚗", title: "مواقف سيارات", sub: "لكل شقة موقف خاص" },
+  ];
+  const cardW = Math.min(comp.width * 0.82, u * 0.8);
+  const cardH = u * 0.15;
+  const top = comp.height * 0.5 - (items.length * (cardH + u * 0.03)) / 2;
+  const out: Layer[] = [];
+  items.forEach((it, i) => {
+    const y = top + i * (cardH + u * 0.03) + cardH / 2;
+    const start = i * 0.35;
+    const card = createLayer("glass", comp);
+    card.name = `Info Card ${i + 1}`;
+    card.startTime = start;
+    card.transform.position.static = { x: cx, y };
+    card.props = { width: cardW, height: cardH, radius: cardH * 0.28, blur: 18, tint: "rgba(20,184,166,0.28)", borderColor: "rgba(160,255,240,0.7)" };
+    let icon = makeText(comp, { content: it.icon, fontSize: Math.round(cardH * 0.45), color: "#ffffff", x: cx - cardW / 2 + cardH * 0.55, y, startTime: start, name: `Info Icon ${i + 1}` });
+    let title = makeText(comp, { content: it.title, fontSize: Math.round(cardH * 0.28), color: "#ffffff", align: "right", x: cx + cardW / 2 - cardH * 0.3, y: y - cardH * 0.14, startTime: start, name: `Info Title ${i + 1}`, fontFamily: DISPLAY });
+    title.props = { ...(title.props as TextLayerProps), bold: true };
+    let sub = makeText(comp, { content: it.sub, fontSize: Math.round(cardH * 0.17), color: "rgba(255,255,255,0.75)", align: "right", x: cx + cardW / 2 - cardH * 0.3, y: y + cardH * 0.2, startTime: start + 0.1, name: `Info Sub ${i + 1}`, fontFamily: "'Cairo', sans-serif" });
+    out.push(applyPresetToLayer(icon, "springIn", comp), applyPresetToLayer(title, "fadeUp", comp), applyPresetToLayer(sub, "fadeUp", comp), applyPresetToLayer(card, "fadeUp", comp));
+  });
+  return out;
+}
+
+function labelBoxes(comp: Composition): Layer[] {
+  const u = unitOf(comp);
+  const x = comp.width * 0.88;
+  let head = makeText(comp, { content: "كانت", fontSize: Math.round(u * 0.12), color: "#1b1b1e", align: "right", x, y: comp.height * 0.2, name: "Poster Headline", fontFamily: DISPLAY });
+  head.props = { ...(head.props as TextLayerProps), stretchIn: 0.8 };
+  let box1 = makeText(comp, { content: "روما", fontSize: Math.round(u * 0.08), color: "#ffffff", align: "right", x, y: comp.height * 0.2 + u * 0.14, startTime: 0.35, name: "Poster Box 1", fontFamily: DISPLAY });
+  box1.props = { ...(box1.props as TextLayerProps), box: "#6d28d9" };
+  let box2 = makeText(comp, { content: "المدينة الأكثر ازدحامًا", fontSize: Math.round(u * 0.04), color: "#ffffff", align: "right", x, y: comp.height * 0.2 + u * 0.24, startTime: 0.65, name: "Poster Box 2", fontFamily: "'Cairo', sans-serif" });
+  box2.props = { ...(box2.props as TextLayerProps), box: "#6d28d9" };
+  return [applyPresetToLayer(box2, "slideInRight", comp), applyPresetToLayer(box1, "slideInRight", comp), head];
+}
+
+function glowCircle(comp: Composition): Layer[] {
+  const u = unitOf(comp);
+  const c = createLayer("ellipse", comp);
+  c.name = "Glow Circle";
+  c.transform.position.static = { x: comp.width / 2, y: comp.height * 0.3 };
+  c.props = { width: u * 0.75, height: u * 0.75, color: "#e11d2e", softness: u * 0.04 };
+  return [applyPresetToLayer(c, "springIn", comp)];
+}
+
+function bigStretchNumber(comp: Composition): Layer[] {
+  const u = unitOf(comp);
+  let num = makeText(comp, { content: "0", fontSize: Math.round(u * 0.3), color: "#5eead4", x: comp.width / 2, y: comp.height * 0.6, name: "Big Number", fontFamily: "'Playfair Display', serif" });
+  num.props = { ...(num.props as TextLayerProps), countTo: 275, countDuration: 1.2, glow: "#14b8a6" };
+  let label = makeText(comp, { content: "ألف طالب", fontSize: Math.round(u * 0.07), color: "#ffffff", x: comp.width / 2, y: comp.height * 0.6 - u * 0.22, startTime: 0.2, name: "Big Number Label", fontFamily: DISPLAY });
+  label.props = { ...(label.props as TextLayerProps), stretchIn: 0.7 };
+  return [label, applyPresetToLayer(num, "springIn", comp)];
+}
+
 export function buildTemplateLayers(templateId: TemplateId, comp: Composition): Layer[] {
   switch (templateId) {
     case "titleCard":
@@ -479,5 +546,13 @@ export function buildTemplateLayers(templateId: TemplateId, comp: Composition): 
       return barChartStory(comp);
     case "brandReveal":
       return brandReveal(comp);
+    case "infoCards":
+      return infoCards(comp);
+    case "labelBoxes":
+      return labelBoxes(comp);
+    case "glowCircle":
+      return glowCircle(comp);
+    case "bigStretchNumber":
+      return bigStretchNumber(comp);
   }
 }

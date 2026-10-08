@@ -188,6 +188,12 @@ function analyzeSpeech(words: TranscribedWord[], pace: Pace): SpeechAnalysis {
 // --- Small, timed layer builders (local to Auto Edit) --------------------
 
 // A user-uploaded Thmanyah Sans wins when present; otherwise the closest free match.
+function hexToRgba(hex: string, alpha: number): string {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return `rgba(20,184,166,${alpha})`;
+  return `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${alpha})`;
+}
+
 const DISPLAY_FONT = "'thmanyahsans', 'Alexandria', 'Cairo', sans-serif";
 const NEON = "#5ab8ff";
 const ACCENT_RED = "#ff3b3b";
@@ -236,6 +242,8 @@ function ctaButtonAt(comp: Composition, text: string, start: number, end: number
 // source-clip seconds; buildEditFromPlan turns it into layers. Keeping the two apart means
 // both brains share exactly the same, tested layout code.
 
+export type KeyPhraseLook = "neon" | "box" | "glass" | "stretch";
+
 export interface EditPlan {
   /** Transcript to caption — may carry corrected wording, same timings. */
   words: TranscribedWord[];
@@ -245,7 +253,9 @@ export interface EditPlan {
   numbers: { text: string; label: string; time: number }[];
   lists: { items: { text: string; time: number }[] }[];
   /** Short on-screen punchlines; a [bracketed] word gets the highlight color. */
-  keyPhrases: { text: string; time: number }[];
+  keyPhrases: { text: string; time: number; look?: KeyPhraseLook }[];
+  /** One brand color for highlights, boxes and glows; null = the default neon/red pairing. */
+  accent?: string | null;
   zooms: { time: number; strength: "light" | "strong" }[];
   sounds: { sound: SoundId; time: number }[];
   colorGrade: ColorGradeId | null;
@@ -291,6 +301,7 @@ export function buildEditFromPlan(
   const toCompTime = (sourceTime: number) => sourceLayer.startTime + (sourceTime - sourceTrimIn);
   const inClip = (t: number, tail = 0) => t >= sourceLayer.startTime && t <= sourceLayer.endTime - tail;
   const vertical = comp.height > comp.width;
+  const accent = plan.accent ?? null;
 
   // Captions, spanning the full source clip.
   const captionWords: CaptionWord[] = plan.words.map((w, i) => ({
@@ -309,11 +320,15 @@ export function buildEditFromPlan(
     style: plan.captionStyle,
     fontSize: Math.round(Math.min(comp.width, comp.height) * 0.072),
     color: "#ffffff",
-    emphasisColor: plan.captionStyle === "phraseStack" ? ACCENT_RED : "#ffd166",
-    fontFamily: plan.captionStyle === "phraseStack" ? DISPLAY_FONT : "'Cairo', sans-serif",
+    emphasisColor: accent ?? (plan.captionStyle === "phraseStack" ? ACCENT_RED : "#ffd166"),
+    fontFamily: plan.captionStyle === "phraseStack" || plan.captionStyle === "glassPill" ? DISPLAY_FONT : "'Cairo', sans-serif",
     sourceTrimIn,
     sourceLayerName: sourceLayer.name,
   } as CaptionLayerProps;
+  if (plan.captionStyle === "glassPill") {
+    captions.transform.position.static = { x: comp.width / 2, y: comp.height * (vertical ? 0.68 : 0.78) };
+    (captions.props as CaptionLayerProps).fontSize = Math.round(Math.min(comp.width, comp.height) * 0.065);
+  }
   if (plan.captionStyle === "phraseStack") {
     captions.transform.position.static = { x: comp.width / 2, y: comp.height * (vertical ? 0.62 : 0.72) };
     (captions.props as CaptionLayerProps).fontSize = Math.round(Math.min(comp.width, comp.height) * 0.085);
@@ -333,7 +348,7 @@ export function buildEditFromPlan(
     const x = vertical ? comp.width * 0.2 : comp.width * 0.78;
     const y = comp.height * (vertical ? 0.17 : 0.24);
     let num = makeText(comp, { content: n.text, fontSize: Math.round(comp.height * (n.text.length <= 2 ? 0.2 : 0.12)), color: "#ffffff", x, y, startTime: t, endTime: end, name: `Auto Number ${idx + 1}`, fontFamily: "'Playfair Display', serif" });
-    num.props = { ...(num.props as TextLayerProps), outline: true, glow: "rgba(255,255,255,0.9)" };
+    num.props = { ...(num.props as TextLayerProps), outline: true, glow: accent ?? "rgba(255,255,255,0.9)" };
     num = applyPresetToLayer(num, "popIn", comp);
     newLayers.push(num);
     if (n.label) {
@@ -344,47 +359,72 @@ export function buildEditFromPlan(
     }
   });
 
-  // Animated list items, each appearing exactly when it's spoken.
+  // List items as frosted glass cards stacking in, each exactly when it's spoken.
   plan.lists.forEach((list, li) => {
-    const listEnd = sourceLayer.endTime;
-    list.items.slice(0, 6).forEach((item, ii) => {
+    const unit = Math.min(comp.width, comp.height);
+    const cardW = Math.min(comp.width * 0.82, unit * 0.8);
+    const cardH = unit * 0.12;
+    const gap = unit * 0.025;
+    const items = list.items.slice(0, 5);
+    const top = comp.height * (vertical ? 0.2 : 0.2);
+    // The stack clears 2.5 s after its last item, so later key moments aren't buried under it.
+    const lastItem = items.length ? toCompTime(items[items.length - 1].time) : 0;
+    const end = Math.min(sourceLayer.endTime, lastItem + 2.5);
+    items.forEach((item, ii) => {
       const t = toCompTime(item.time);
       if (!inClip(t)) return;
+      const y = top + ii * (cardH + gap);
+      const card = createLayer("glass", comp);
+      card.name = `Auto List Card ${li + 1}.${ii + 1}`;
+      card.startTime = t;
+      card.endTime = end;
+      card.transform.position.static = { x: comp.width / 2, y };
+      card.props = { width: cardW, height: cardH, radius: cardH * 0.3, blur: 18, tint: hexToRgba(accent ?? "#14b8a6", 0.3), borderColor: "rgba(255,255,255,0.6)" } as GlassLayerProps;
       let entry = makeText(comp, {
-        content: `• ${item.text}`,
-        fontSize: Math.round(Math.min(comp.width, comp.height) * 0.045),
+        content: item.text,
+        fontSize: Math.round(cardH * 0.38),
         color: "#ffffff",
         align: "right",
-        x: comp.width * (vertical ? 0.9 : 0.7),
-        y: comp.height * 0.3 + ii * Math.min(comp.width, comp.height) * 0.09,
+        x: comp.width / 2 + cardW / 2 - cardH * 0.35,
+        y,
         startTime: t,
-        endTime: listEnd,
+        endTime: end,
         name: `Auto List ${li + 1}.${ii + 1}`,
-        fontFamily: "'Cairo', sans-serif",
+        fontFamily: DISPLAY_FONT,
       });
-      entry = applyPresetToLayer(applyPresetToLayer(entry, "slideInRight", comp), "fadeIn", comp);
-      newLayers.push(entry);
+      let check = makeText(comp, { content: "✓", fontSize: Math.round(cardH * 0.45), color: accent ?? "#5eead4", x: comp.width / 2 - cardW / 2 + cardH * 0.5, y, startTime: t + 0.1, endTime: end, name: `Auto List Check ${li + 1}.${ii + 1}` });
+      check.props = { ...(check.props as TextLayerProps), glow: accent ?? "#5eead4" };
+      entry = applyPresetToLayer(applyPresetToLayer(entry, "fadeUp", comp), "fadeOut", comp);
+      check = applyPresetToLayer(applyPresetToLayer(check, "springIn", comp), "fadeOut", comp);
+      newLayers.push(check, entry, applyPresetToLayer(applyPresetToLayer(card, "fadeUp", comp), "fadeOut", comp));
     });
   });
 
-  // Key phrases: short highlighted punchlines in the middle of the frame.
+  // Key phrases, each in its look: neon sign, accent label box, glass pill, or kashida stretch.
   plan.keyPhrases.slice(0, 8).forEach((k, idx) => {
     const t = toCompTime(k.time);
     if (!inClip(t, 0.3)) return;
+    const unit = Math.min(comp.width, comp.height);
+    const look = k.look ?? "neon";
+    const color = accent ?? NEON;
     let phrase = makeText(comp, {
-      content: k.text,
-      fontSize: Math.round(Math.min(comp.width, comp.height) * 0.07),
-      color: "#ffffff",
+      content: look === "box" || look === "glass" ? k.text.replace(/[[\]]/g, "") : k.text,
+      fontSize: Math.round(unit * (look === "glass" ? 0.065 : look === "box" ? 0.075 : 0.11)),
+      color: look === "neon" ? color : "#ffffff",
       x: comp.width / 2,
       y: comp.height * (vertical ? 0.42 : 0.45),
       startTime: t,
       endTime: Math.min(t + 2.4, sourceLayer.endTime),
       name: `Auto Key Phrase ${idx + 1}`,
-      fontFamily: "'Cairo', sans-serif",
+      fontFamily: DISPLAY_FONT,
     });
-    // Neon sign look: glowing blue display type, the bracketed word in red.
-    phrase.props = { ...(phrase.props as TextLayerProps), fontFamily: DISPLAY_FONT, fontSize: Math.round(Math.min(comp.width, comp.height) * 0.11), color: NEON, glow: NEON, emphasisColor: "#9fdcff" };
-    phrase = applyPresetToLayer(applyPresetToLayer(phrase, "popIn", comp), "fadeOut", comp);
+    const props = phrase.props as TextLayerProps;
+    if (look === "neon") phrase.props = { ...props, glow: color, emphasisColor: "#ffffff" };
+    else if (look === "box") phrase.props = { ...props, box: accent ?? "#6d28d9" };
+    else if (look === "glass") phrase.props = { ...props, box: "glass", emphasisColor: color };
+    else phrase.props = { ...props, stretchIn: 0.8, emphasisColor: color };
+    const entrance = look === "box" ? "slideInRight" : look === "glass" ? "springIn" : look === "stretch" ? "fadeIn" : "popIn";
+    phrase = applyPresetToLayer(applyPresetToLayer(phrase, entrance, comp), "fadeOut", comp);
     newLayers.push(phrase);
   });
 

@@ -166,12 +166,16 @@ const TEMPLATE_SWATCH: Record<TemplateId, [string, string]> = {
   statHero: ["#7cff8a", "#1b1b1e"],
   barChartStory: ["#4f8cff", "#1b1b1e"],
   brandReveal: ["#4f8cff", "#1b1b1e"],
+  infoCards: ["#14b8a6", "#1b1b1e"],
+  labelBoxes: ["#6d28d9", "#e5e5e5"],
+  glowCircle: ["#e11d2e", "#1b1b1e"],
+  bigStretchNumber: ["#5eead4", "#1b1b1e"],
 };
 
-const TEXT_IDS: TemplateId[] = ["wordReveal", "markerHeadline", "brandReveal", "titleCard", "lowerThird", "typewriterText", "highlightText"];
+const TEXT_IDS: TemplateId[] = ["labelBoxes", "wordReveal", "markerHeadline", "brandReveal", "titleCard", "lowerThird", "typewriterText", "highlightText"];
 const CAPSULE_IDS: TemplateId[] = ["badge", "ctaButton"];
-const LIST_IDS: TemplateId[] = ["statHero", "barChartStory", "bigNumber", "animatedList", "countUpNumber", "statCard", "comparisonCard"];
-const MOTION_IDS: TemplateId[] = ["orbitingIcons"];
+const LIST_IDS: TemplateId[] = ["infoCards", "bigStretchNumber", "statHero", "barChartStory", "bigNumber", "animatedList", "countUpNumber", "statCard", "comparisonCard"];
+const MOTION_IDS: TemplateId[] = ["glowCircle", "orbitingIcons"];
 
 function templateCards(ids: TemplateId[]): TemplateCard[] {
   return MOTION_TEMPLATES.filter((t) => ids.includes(t.id)).map((t) => ({
@@ -193,6 +197,7 @@ export const CAPTION_CARDS: CaptionCard[] = [
   { kind: "caption", id: "karaokeLine", label: "كاريوكي", description: "السطر كامل، تمييز الكلمة أثناء النطق", swatch: ["#4f8cff", "#1b1b1e"] },
   { kind: "caption", id: "pillWord", label: "كبسولة زجاجية", description: "كلمة داخل خلفية زجاجية شفافة", swatch: ["#a78bfa", "#2a2a30"] },
   { kind: "caption", id: "emphasisOnly", label: "تمييز كلمة", description: "خط كامل، تمييز الكلمات المهمة فقط بالذهبي", swatch: ["#ffd166", "#1b1b1e"] },
+  { kind: "caption", id: "glassPill", label: "كبسولة زجاج", description: "العبارة داخل كبسولة زجاجية حقيقية تطلع مع كل جملة", swatch: ["#ffffff", "#3a3a44"] },
   { kind: "caption", id: "phraseStack", label: "احترافي متدرّج", description: "سطر عريض وتحته أسطر أصغر، الكلمات تطلع وحدة وحدة والمهمة تتوهج بالأحمر", swatch: ["#ff3b3b", "#1b1b1e"] },
   { kind: "caption", id: "buildUp", label: "تراكمي", description: "الكلمات تتجمع وتبقى ظاهرة أثناء الكلام", swatch: ["#7cff8a", "#1b1b1e"] },
 ];

@@ -10,6 +10,8 @@ export interface AiEditRequest {
   title: { enabled: boolean; text: string };
   cta: { enabled: boolean; text: string };
   frame: { width: number; height: number };
+  /** Brand color chosen by the creator ("" = let Claude pick). */
+  brandColor?: string;
 }
 
 /** Claude's edit decisions, referencing transcript words by index so timing stays exact. */
@@ -20,7 +22,8 @@ export interface ClaudeEditOutput {
   title: string | null;
   numbers: { atWord: number; value: string; label: string }[];
   lists: { items: { atWord: number; text: string }[] }[];
-  keyPhrases: { atWord: number; text: string }[];
+  keyPhrases: { atWord: number; text: string; look?: string }[];
+  accentColor?: string;
   zooms: { atWord: number; strength: string }[];
   sounds: { atWord: number; sound: string }[];
   colorGrade: string;
