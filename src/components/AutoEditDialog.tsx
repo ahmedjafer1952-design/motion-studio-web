@@ -5,8 +5,10 @@ import type { ModelSize, TranscribeProgress } from "../engine/transcribe";
 import { planFromRules, type Pace } from "../engine/autoEdit";
 import { aiSettings, fetchClaudeEdit, planFromClaude } from "../engine/aiEdit/client";
 import { isSpeechSource } from "../engine/mediaStore";
+import { buildManualPrompt, parseManualReply } from "../engine/aiEdit/manual";
+import type { TranscribedWord } from "../engine/transcribe";
 
-type Mode = "claude" | "rules";
+type Mode = "chat" | "claude" | "rules";
 type Phase = TranscribeProgress | { phase: "claude" };
 
 function progressLabel(p: Phase): string {
@@ -28,7 +30,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
       (l.type === "video" || l.type === "audio") && isSpeechSource((l.props as VideoLayerProps | AudioLayerProps).src)
   );
 
-  const [mode, setMode] = useState<Mode>("claude");
+  const [mode, setMode] = useState<Mode>("chat");
   const [sourceId, setSourceId] = useState(sourceCandidates[0]?.id ?? "");
   const [pace, setPace] = useState<Pace>("medium");
   const [modelSize, setModelSize] = useState<ModelSize>("base");
@@ -43,6 +45,9 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
   const [showSettings, setShowSettings] = useState(false);
   const [apiKey, setApiKey] = useState(aiSettings.getApiKey());
   const [accessCode, setAccessCode] = useState(aiSettings.getAccessCode());
+  const [manual, setManual] = useState<{ sourceId: string; words: TranscribedWord[]; prompt: string } | null>(null);
+  const [reply, setReply] = useState("");
+  const [copied, setCopied] = useState(false);
 
   // Transcription can't be interrupted mid-inference, so closing the dialog discards its result instead.
   const discardedRef = useRef(false);
@@ -83,15 +88,20 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
         return;
       }
 
-      setProgress({ phase: "claude" });
-      const out = await fetchClaudeEdit({
+      const req = {
         words,
         pace,
         instructions,
         title: { enabled: includeTitle, text: titleText },
         cta: { enabled: includeCta, text: ctaText },
         frame: { width: comp.width, height: comp.height },
-      });
+      };
+      if (mode === "chat") {
+        setManual({ sourceId: source.id, words, prompt: buildManualPrompt(req) });
+        return;
+      }
+      setProgress({ phase: "claude" });
+      const out = await fetchClaudeEdit(req);
       if (discardedRef.current) return;
       applyEditPlan(source.id, planFromClaude(words, out));
       setSummary(out.summary || "Done.");
@@ -107,6 +117,62 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
     aiSettings.setAccessCode(accessCode);
     setShowSettings(false);
   };
+
+  const copyPrompt = async () => {
+    if (!manual) return;
+    try {
+      await navigator.clipboard.writeText(manual.prompt);
+      setCopied(true);
+    } catch {
+      setError("Couldn't copy automatically — select the text in the box and press Ctrl+C.");
+    }
+  };
+
+  const applyReply = () => {
+    if (!manual) return;
+    try {
+      const out = parseManualReply(reply);
+      applyEditPlan(manual.sourceId, planFromClaude(manual.words, out));
+      setSummary(out.summary || "تم.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  if (manual && !summary) {
+    return (
+      <div className="modal-backdrop">
+        <div className="modal" dir="rtl">
+          <h3>💬 المونتاج عن طريق اشتراك Claude مالتك</h3>
+          <p className="hint">
+            <b>١.</b> انسخ الطلب، وافتح Claude (claude.ai أو تطبيق Claude) بمحادثة جديدة، والصقه وارسله.
+          </p>
+          <textarea className="manual-prompt" dir="auto" rows={5} readOnly value={manual.prompt} onFocus={(e) => e.target.select()} />
+          <div className="modal-actions">
+            <button type="button" className="primary" onClick={copyPrompt}>
+              {copied ? "✅ انتسخ" : "📋 انسخ الطلب"}
+            </button>
+            <a className="button-link" href="https://claude.ai/new" target="_blank" rel="noreferrer">
+              🔗 افتح claude.ai
+            </a>
+          </div>
+          <p className="hint">
+            <b>٢.</b> لما يجاوب Claude، انسخ جوابه كله (زر النسخ تحت الجواب) والصقه هنا:
+          </p>
+          <textarea dir="ltr" rows={5} placeholder='{ "emphasis": [...], ... }' value={reply} onChange={(e) => setReply(e.target.value)} />
+          {error && <p className="hint error">{error}</p>}
+          <div className="modal-actions">
+            <button type="button" onClick={onClose}>
+              إلغاء
+            </button>
+            <button type="button" className="primary" onClick={applyReply} disabled={!reply.trim()}>
+              ✨ طبّق المونتاج
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (summary) {
     return (
@@ -133,6 +199,9 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
         <h3>✨ Auto Edit</h3>
 
         <div className="mode-toggle">
+          <button type="button" className={mode === "chat" ? "active" : ""} onClick={() => setMode("chat")}>
+            💬 اشتراكي بـ Claude
+          </button>
           <button type="button" className={mode === "claude" ? "active" : ""} onClick={() => setMode("claude")}>
             🤖 Claude
           </button>
@@ -141,7 +210,9 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <p className="hint">
-          {mode === "claude"
+          {mode === "chat"
+            ? "Uses your Claude subscription: the app prepares a request, you paste it into a Claude chat, then paste the answer back. No API key or credit needed."
+            : mode === "claude"
             ? "Claude listens to the transcript, fixes dialect words, and decides the highlights, numbers, lists, punchlines, zooms, sounds and color — like a human editor."
             : "Fixed rules (ordinal words, digits, pauses). Instant and free, but not smart."}
         </p>
@@ -161,7 +232,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
               </select>
             </label>
 
-            {mode === "claude" && (
+            {mode !== "rules" && (
               <label className="field">
                 <span>Tell Claude about the video (optional)</span>
                 <textarea
@@ -209,7 +280,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
                 <input
                   dir="auto"
                   value={titleText}
-                  placeholder={mode === "claude" ? "Leave empty and Claude writes one" : "اسم القناة"}
+                  placeholder={mode !== "rules" ? "Leave empty and Claude writes one" : "اسم القناة"}
                   onChange={(e) => setTitleText(e.target.value)}
                 />
               </label>
@@ -220,7 +291,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
                 <input
                   dir="auto"
                   value={ctaText}
-                  placeholder={mode === "claude" ? "Leave empty and Claude writes one" : "تابعنا"}
+                  placeholder={mode !== "rules" ? "Leave empty and Claude writes one" : "تابعنا"}
                   onChange={(e) => setCtaText(e.target.value)}
                 />
               </label>
@@ -270,7 +341,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
             Cancel
           </button>
           <button type="button" className="primary" onClick={handleRun} disabled={!sourceId || !!progress}>
-            {progress ? progressLabel(progress) : mode === "claude" ? "✨ Edit with Claude" : "✨ Generate"}
+            {progress ? progressLabel(progress) : mode === "chat" ? "✨ Prepare request for Claude" : mode === "claude" ? "✨ Edit with Claude" : "✨ Generate"}
           </button>
         </div>
       </div>

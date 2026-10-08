@@ -746,3 +746,17 @@ textarea {
   border-radius: 6px;
   padding: 12px;
 }
+
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #3a3a44);
+  color: inherit;
+  text-decoration: none;
+}
+.manual-prompt {
+  font-size: 11px;
+  opacity: 0.8;
+}
