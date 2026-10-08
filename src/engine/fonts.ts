@@ -8,6 +8,10 @@ export interface FontChoice {
 /** Arabic-capable web fonts, loaded from Google Fonts in index.html. */
 export const FONT_CHOICES: FontChoice[] = [
   { label: "Arial — افتراضي", value: "Arial, sans-serif" },
+  { label: "Alexandria — عريض مدوّر (ستايل الريلز)", value: "'Alexandria', sans-serif" },
+  { label: "Readex Pro — هندسي", value: "'Readex Pro', sans-serif" },
+  { label: "Rubik — مدوّر", value: "'Rubik', sans-serif" },
+  { label: "Playfair Display — أرقام كلاسيكية", value: "'Playfair Display', serif" },
   { label: "Cairo — القاهرة", value: "'Cairo', sans-serif" },
   { label: "Tajawal — تجوّل", value: "'Tajawal', sans-serif" },
   { label: "IBM Plex Sans Arabic", value: "'IBM Plex Sans Arabic', sans-serif" },

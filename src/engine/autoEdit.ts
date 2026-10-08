@@ -187,7 +187,7 @@ function analyzeSpeech(words: TranscribedWord[], pace: Pace): SpeechAnalysis {
 
 // --- Small, timed layer builders (local to Auto Edit) --------------------
 
-const DISPLAY_FONT = "'Lalezar', 'Cairo', sans-serif";
+const DISPLAY_FONT = "'Alexandria', 'Cairo', sans-serif";
 const NEON = "#5ab8ff";
 const ACCENT_RED = "#ff3b3b";
 
@@ -331,7 +331,7 @@ export function buildEditFromPlan(
     // Huge hollow neon number in the top corner, like a lit sign.
     const x = vertical ? comp.width * 0.2 : comp.width * 0.78;
     const y = comp.height * (vertical ? 0.17 : 0.24);
-    let num = makeText(comp, { content: n.text, fontSize: Math.round(comp.height * (n.text.length <= 2 ? 0.2 : 0.12)), color: "#ffffff", x, y, startTime: t, endTime: end, name: `Auto Number ${idx + 1}`, fontFamily: "'Cairo', sans-serif" });
+    let num = makeText(comp, { content: n.text, fontSize: Math.round(comp.height * (n.text.length <= 2 ? 0.2 : 0.12)), color: "#ffffff", x, y, startTime: t, endTime: end, name: `Auto Number ${idx + 1}`, fontFamily: "'Playfair Display', serif" });
     num.props = { ...(num.props as TextLayerProps), outline: true, glow: "rgba(255,255,255,0.9)" };
     num = applyPresetToLayer(num, "popIn", comp);
     newLayers.push(num);
