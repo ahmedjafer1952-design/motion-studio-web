@@ -13,6 +13,7 @@ import type {
   VideoLayerProps,
 } from "../types";
 import { evaluateTransform } from "./evaluate";
+import { getColorGrade } from "./colorGrade";
 
 export interface RenderOptions {
   playing: boolean;
@@ -471,4 +472,27 @@ export function renderComposition(ctx: CanvasRenderingContext2D, comp: Compositi
     drawLayer(ctx, comp.layers[i], time, resolvedOpts);
   }
   ctx.restore();
+
+  applyColorGrade(ctx, comp);
+}
+
+/** Cinematic color-grade "look", applied as a post-process pass over the whole composite (preview and export alike). */
+function applyColorGrade(ctx: CanvasRenderingContext2D, comp: Composition) {
+  const grade = getColorGrade(comp.colorGrade);
+  if (grade.filter === "none" && !grade.tint) return;
+  if (grade.filter !== "none") {
+    ctx.save();
+    ctx.filter = grade.filter;
+    ctx.drawImage(ctx.canvas, 0, 0);
+    ctx.filter = "none";
+    ctx.restore();
+  }
+  if (grade.tint) {
+    ctx.save();
+    ctx.globalAlpha = grade.tint.alpha;
+    ctx.globalCompositeOperation = grade.tint.blend;
+    ctx.fillStyle = grade.tint.color;
+    ctx.fillRect(0, 0, comp.width, comp.height);
+    ctx.restore();
+  }
 }

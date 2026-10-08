@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { useEditorStore } from "../state/store";
 import {
   LIBRARY_CATEGORIES,
@@ -21,6 +21,8 @@ export function LibraryPanel({
   const applyScene = useEditorStore((s) => s.applyScene);
   const addLayer = useEditorStore((s) => s.addLayer);
   const addLayerWithProps = useEditorStore((s) => s.addLayerWithProps);
+  const updateComposition = useEditorStore((s) => s.updateComposition);
+  const activeGrade = useEditorStore((s) => s.project.composition.colorGrade ?? "none");
 
   const flash = (id: string) => {
     setFlashId(id);
@@ -134,6 +136,38 @@ export function LibraryPanel({
                       ))}
                     </div>
                   </div>
+                );
+              }
+              if (card.kind === "grade") {
+                const isActive = activeGrade === card.id;
+                return (
+                  <button
+                    key={card.id}
+                    className={`library-card ${flashId === card.id ? "flash" : ""} ${isActive ? "selected" : ""}`}
+                    onClick={() => {
+                      updateComposition({ colorGrade: card.id });
+                      flash(card.id);
+                    }}
+                  >
+                    <div className="library-card-preview grade-preview">
+                      <div className="grade-base" style={{ filter: card.filter }} />
+                      {card.tint && (
+                        <div
+                          className="grade-tint"
+                          style={
+                            {
+                              backgroundColor: card.tint.color,
+                              opacity: card.tint.alpha * 2.2,
+                              mixBlendMode: card.tint.blend,
+                            } as CSSProperties
+                          }
+                        />
+                      )}
+                      {isActive && <span className="grade-active-badge">✓</span>}
+                    </div>
+                    <div className="library-card-label">{card.label}</div>
+                    <div className="library-card-desc">{card.description}</div>
+                  </button>
                 );
               }
               // autoedit

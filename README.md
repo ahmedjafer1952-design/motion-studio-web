@@ -29,6 +29,12 @@ account, no upload.
   scenes (color-variant dots per scene), and shapes/glass — plus 10 **motion
   presets** (fade/zoom/slide/pop/pan) you can apply to *any* layer from its
   properties panel to animate it in or out.
+- **Cinematic color grading**: 10 whole-composition "looks" (Teal & Orange,
+  Moody Blue, Warm Film, Noir B&W, Vintage Sepia, High Contrast, Cyberpunk,
+  Faded Pastel, Golden Hour, Day-for-Night) applied as a post-process pass
+  over everything — picked from the library panel's 🎨 تلوين سينمائي
+  category, with a live WYSIWYG preview on each card. Saved with the
+  project; export renders the exact same grade you see in preview.
 - **Faceless scenes**: 6 full-screen scene templates × 4 color variants each
   (24 total) for when you don't want to show a person — Neon, Realistic
   Product, 3D Mockup, Paper Collage, Pinned Note, Bouncing Words. Each
@@ -93,7 +99,9 @@ src/
     templates.ts             # motion library — builds ready-animated groups
                               # of layers (title card, lower third, etc.)
     libraryCatalog.ts         # categorizes templates/captions/scenes/elements
-                               # for the Library panel's icon rail + grid
+                               # /grades for the Library panel's icon rail + grid
+    colorGrade.ts              # cinematic color-grade presets (filter + tint)
+                                # applied as a post-process pass in the renderer
     builders.ts               # shared layer constructors used by templates,
                                # scenes and Auto Edit (makeText/makeRect/…)
     scenes.ts                  # faceless scenes — full background + product

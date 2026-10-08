@@ -140,6 +140,19 @@ export interface Layer {
     | GlassLayerProps;
 }
 
+export type ColorGradeId =
+  | "none"
+  | "tealOrange"
+  | "moodyBlue"
+  | "warmFilm"
+  | "noir"
+  | "vintageSepia"
+  | "highContrast"
+  | "cyberpunk"
+  | "fadedPastel"
+  | "goldenHour"
+  | "dayForNight";
+
 export interface Composition {
   id: string;
   name: string;
@@ -148,6 +161,7 @@ export interface Composition {
   fps: number;
   duration: number; // seconds
   backgroundColor: string;
+  colorGrade: ColorGradeId; // cinematic color-grade "look" applied over the whole composite
   layers: Layer[]; // index 0 = topmost / front
 }
 

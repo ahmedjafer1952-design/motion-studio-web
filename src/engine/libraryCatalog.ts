@@ -1,6 +1,7 @@
-import type { CaptionStyle, LayerType } from "../types";
+import type { CaptionStyle, ColorGradeId, LayerType } from "../types";
 import { MOTION_TEMPLATES, type TemplateId } from "./templates";
 import { FACELESS_SCENES, type SceneId } from "./scenes";
+import { COLOR_GRADES } from "./colorGrade";
 
 export type LibraryCategoryId =
   | "text"
@@ -8,6 +9,7 @@ export type LibraryCategoryId =
   | "lists"
   | "captions"
   | "scenes"
+  | "grade"
   | "elements"
   | "autoedit";
 
@@ -23,6 +25,7 @@ export const LIBRARY_CATEGORIES: LibraryCategory[] = [
   { id: "capsules", icon: "⬭", label: "كبسولات وأزرار" },
   { id: "lists", icon: "≣", label: "قوائم ومؤشرات" },
   { id: "scenes", icon: "🎭", label: "فيسلس" },
+  { id: "grade", icon: "🎨", label: "تلوين سينمائي" },
   { id: "elements", icon: "◐", label: "عناصر" },
   { id: "autoedit", icon: "✨", label: "منطق ذكاء" },
 ];
@@ -67,7 +70,25 @@ export interface AutoEditCard {
   swatch: [string, string];
 }
 
-export type LibraryCard = TemplateCard | CaptionCard | ElementCard | SceneGroupCard | AutoEditCard;
+export interface GradeCard {
+  kind: "grade";
+  id: ColorGradeId;
+  label: string;
+  description: string;
+  filter: string;
+  tint?: { color: string; alpha: number; blend: GlobalCompositeOperation };
+}
+
+export type LibraryCard = TemplateCard | CaptionCard | ElementCard | SceneGroupCard | AutoEditCard | GradeCard;
+
+export const GRADE_CARDS: GradeCard[] = COLOR_GRADES.map((g) => ({
+  kind: "grade",
+  id: g.id,
+  label: g.label,
+  description: g.description,
+  filter: g.filter,
+  tint: g.tint,
+}));
 
 const TEMPLATE_SWATCH: Record<TemplateId, [string, string]> = {
   titleCard: ["#4f8cff", "#2a2a30"],
@@ -161,6 +182,8 @@ export function cardsForCategory(category: LibraryCategoryId): LibraryCard[] {
       return ELEMENT_CARDS;
     case "scenes":
       return SCENE_GROUP_CARDS;
+    case "grade":
+      return GRADE_CARDS;
     case "autoedit":
       return [AUTOEDIT_CARD];
   }

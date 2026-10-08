@@ -99,6 +99,7 @@ export function createDefaultComposition(): Composition {
     fps: 30,
     duration: 5,
     backgroundColor: "#111113",
+    colorGrade: "none",
     layers: [],
   };
 }
