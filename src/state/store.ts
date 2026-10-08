@@ -39,6 +39,7 @@ interface EditorState {
   updateComposition: (patch: Partial<Composition>) => void;
 
   addLayer: (type: LayerType) => void;
+  addLayerWithProps: (type: LayerType, propsPatch: Record<string, unknown>) => void;
   removeLayer: (layerId: string) => void;
   selectLayer: (layerId: string | null) => void;
   renameLayer: (layerId: string, name: string) => void;
@@ -135,6 +136,15 @@ export const useEditorStore = create<EditorState>((set, get) => {
 
     addLayer: (type) => {
       const layer = createLayer(type, get().project.composition);
+      commit(
+        (p) => ({ ...p, composition: { ...p.composition, layers: [layer, ...p.composition.layers] } }),
+        { selectedLayerId: layer.id }
+      );
+    },
+
+    addLayerWithProps: (type, propsPatch) => {
+      const base = createLayer(type, get().project.composition);
+      const layer: Layer = { ...base, props: { ...base.props, ...propsPatch } as Layer["props"] };
       commit(
         (p) => ({ ...p, composition: { ...p.composition, layers: [layer, ...p.composition.layers] } }),
         { selectedLayerId: layer.id }

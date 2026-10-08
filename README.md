@@ -21,11 +21,14 @@ account, no upload.
   word to emphasize it (color + highlight), the equivalent of wrapping it in
   `[brackets]`. 4 caption styles: big word, karaoke line, pill/glass badge,
   line + emphasis-only. Proper RTL layout for Arabic text.
-- **Motion library**: one-click templates that insert a ready-animated group
-  of layers — Title Card, Lower Third, Badge/Capsule, CTA Button (with a
-  looping pulse), Big Number, Animated List — plus 10 **motion presets**
-  (fade/zoom/slide/pop/pan) you can apply to *any* layer from its properties
-  panel to animate it in or out.
+- **Motion library panel** (📚 المكتبة): a browsable, categorized library —
+  an icon rail (text & titles, captions, capsules/buttons, lists, faceless
+  scenes, elements, Auto Edit) next to a grid of preview cards, click to
+  insert. Covers the Title Card / Lower Third / Badge / CTA Button / Big
+  Number / Animated List templates, all 4 caption styles, all 24 faceless
+  scenes (color-variant dots per scene), and shapes/glass — plus 10 **motion
+  presets** (fade/zoom/slide/pop/pan) you can apply to *any* layer from its
+  properties panel to animate it in or out.
 - **Faceless scenes**: 6 full-screen scene templates × 4 color variants each
   (24 total) for when you don't want to show a person — Neon, Realistic
   Product, 3D Mockup, Paper Collage, Pinned Note, Bouncing Words. Each
@@ -89,6 +92,8 @@ src/
                              # onto an existing layer
     templates.ts             # motion library — builds ready-animated groups
                               # of layers (title card, lower third, etc.)
+    libraryCatalog.ts         # categorizes templates/captions/scenes/elements
+                               # for the Library panel's icon rail + grid
     builders.ts               # shared layer constructors used by templates,
                                # scenes and Auto Edit (makeText/makeRect/…)
     scenes.ts                  # faceless scenes — full background + product
@@ -98,8 +103,10 @@ src/
   state/
     store.ts            # Zustand store: project state, undo/redo, actions
   components/
-    Toolbar.tsx          # add layer, undo/redo, templates, scenes, Auto
-                          # Edit, play/pause, save/load, export
+    Toolbar.tsx          # add layer, undo/redo, library, Auto Edit,
+                          # play/pause, save/load, export
+    LibraryPanel.tsx      # browsable library: category rail + preview-card
+                           # grid (templates, captions, scenes, elements)
     AutoEditDialog.tsx   # Auto Edit's source/pace/title/CTA config modal
     PreviewCanvas.tsx    # live canvas preview + playback loop
     PropertiesPanel.tsx  # per-layer content + animatable transform editor
