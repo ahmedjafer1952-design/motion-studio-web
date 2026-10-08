@@ -187,7 +187,8 @@ function analyzeSpeech(words: TranscribedWord[], pace: Pace): SpeechAnalysis {
 
 // --- Small, timed layer builders (local to Auto Edit) --------------------
 
-const DISPLAY_FONT = "'Alexandria', 'Cairo', sans-serif";
+// A user-uploaded Thmanyah Sans wins when present; otherwise the closest free match.
+const DISPLAY_FONT = "'thmanyahsans', 'Alexandria', 'Cairo', sans-serif";
 const NEON = "#5ab8ff";
 const ACCENT_RED = "#ff3b3b";
 

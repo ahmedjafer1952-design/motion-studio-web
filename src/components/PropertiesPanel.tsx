@@ -1,4 +1,5 @@
-import { useEffect, useState, type InputHTMLAttributes } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type InputHTMLAttributes } from "react";
+import { addFontFiles, customFontValue, listCustomFonts, subscribeCustomFonts } from "../engine/customFonts";
 import type {
   AnimatablePropKey,
   AudioLayerProps,
@@ -307,19 +308,65 @@ export function PropertiesPanel() {
   );
 }
 
+const UPLOAD_FONT = "__upload_font__";
+
 function FontSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const known = FONT_CHOICES.some((f) => f.value === value);
+  const custom = useSyncExternalStore(subscribeCustomFonts, listCustomFonts);
+  const customFamilies = [...new Set(custom.map((f) => f.family))];
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const known = FONT_CHOICES.some((f) => f.value === value) || customFamilies.some((f) => customFontValue(f) === value);
+
+  const handleFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    setStatus("جاري تحميل الخط…");
+    const { families, failed } = await addFontFiles(files);
+    setStatus(failed.length ? `ما انقرأ: ${failed.join("، ")}` : null);
+    if (families[0]) onChange(customFontValue(families[0]));
+  };
+
   return (
     <label className="field">
       <span>Font</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <select
+        value={value}
+        onChange={(e) => {
+          if (e.target.value === UPLOAD_FONT) fileRef.current?.click();
+          else onChange(e.target.value);
+        }}
+      >
         {!known && <option value={value}>{value}</option>}
-        {FONT_CHOICES.map((f) => (
-          <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>
-            {f.label}
-          </option>
-        ))}
+        {customFamilies.length > 0 && (
+          <optgroup label="خطوطك">
+            {customFamilies.map((family) => (
+              <option key={family} value={customFontValue(family)} style={{ fontFamily: customFontValue(family) }}>
+                {family}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        <optgroup label="الخطوط المدمجة">
+          {FONT_CHOICES.map((f) => (
+            <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>
+              {f.label}
+            </option>
+          ))}
+        </optgroup>
+        <option value={UPLOAD_FONT}>＋ رفع خط من جهازك (otf / ttf / woff)…</option>
       </select>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".otf,.ttf,.woff,.woff2"
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          handleFiles(files);
+        }}
+      />
+      {status && <span className="hint">{status}</span>}
     </label>
   );
 }

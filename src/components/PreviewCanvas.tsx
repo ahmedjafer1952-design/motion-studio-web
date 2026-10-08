@@ -3,6 +3,7 @@ import { useEditorStore } from "../state/store";
 import { defaultSession, renderComposition } from "../engine/renderer";
 import { drawSelectionOutline, hitTestLayers, layerBounds } from "../engine/hitTest";
 import { ensureFontsLoaded } from "../engine/fonts";
+import { subscribeCustomFonts } from "../engine/customFonts";
 
 export function PreviewCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -28,6 +29,17 @@ export function PreviewCanvas() {
     defaultSession.onFrameReady = () => setFrameTick((n) => n + 1);
     return () => {
       defaultSession.onFrameReady = null;
+    };
+  }, []);
+
+  // Any font finishing loading (web or user-uploaded) can change how text renders.
+  useEffect(() => {
+    const redraw = () => setFrameTick((n) => n + 1);
+    document.fonts?.addEventListener("loadingdone", redraw);
+    const unsubscribe = subscribeCustomFonts(redraw);
+    return () => {
+      document.fonts?.removeEventListener("loadingdone", redraw);
+      unsubscribe();
     };
   }, []);
 

@@ -6,6 +6,7 @@ import { Timeline } from "./components/Timeline/Timeline";
 import { PropertiesPanel } from "./components/PropertiesPanel";
 import { useEditorStore } from "./state/store";
 import { collectUnusedMedia } from "./engine/mediaStore";
+import { customFontRefs, loadCustomFonts } from "./engine/customFonts";
 
 const AUTOSAVE_KEY = "motion-studio-autosave";
 
@@ -24,7 +25,8 @@ export default function App() {
     } catch {
       // A corrupt autosave just means starting from a fresh project.
     }
-    collectUnusedMedia(JSON.stringify(useEditorStore.getState().project)).catch(() => {});
+    loadCustomFonts().catch(() => {});
+    collectUnusedMedia(JSON.stringify(useEditorStore.getState().project) + customFontRefs()).catch(() => {});
   }, [loadProject]);
 
   useEffect(() => {

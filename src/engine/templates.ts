@@ -387,7 +387,7 @@ function comparisonCard(comp: Composition): Layer[] {
   return [rightLabel, rightNum, leftLabel, leftNum, divider, card];
 }
 
-const DISPLAY = "'Alexandria', 'Cairo', sans-serif";
+const DISPLAY = "'thmanyahsans', 'Alexandria', 'Cairo', sans-serif";
 const unitOf = (comp: Composition) => Math.min(comp.width, comp.height);
 
 function wordReveal(comp: Composition): Layer[] {
