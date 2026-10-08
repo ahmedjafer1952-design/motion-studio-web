@@ -70,7 +70,14 @@ export async function exportCompositionToVideo(
   try {
     await Promise.all([
       ensureFontsLoaded(comp),
-      comp.layers.some((l) => l.type === "cutout" || (l.type === "video" && (l.props as { background?: unknown }).background)) ? import("./segmentation").then((m) => m.ensureSegmenter()) : null,
+      comp.layers.some((l) => l.type === "cutout" || (l.type === "video" && (l.props as { background?: unknown }).background))
+        ? import("./segmentation").then((m) =>
+            Promise.all([
+              m.ensureSegmenter("fast"),
+              JSON.stringify(comp.layers).includes('"quality":"high"') ? m.ensureSegmenter("high") : null,
+            ])
+          )
+        : null,
       session.preloadImages(comp),
       session.preloadVideos(comp),
       session.preloadAudios(comp),

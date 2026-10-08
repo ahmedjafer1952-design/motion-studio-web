@@ -791,6 +791,59 @@ function drawVideoBackground(ctx: CanvasRenderingContext2D, bg: VideoBackground,
   ctx.restore();
 }
 
+let wrapBufferA: HTMLCanvasElement | null = null;
+let wrapBufferB: HTMLCanvasElement | null = null;
+
+/**
+ * Light wrap: a thin band just inside the person's edge picks up a blurred copy of the new
+ * background, the way real light spills around a subject — the single biggest cue that stops a
+ * replaced background from looking pasted on.
+ */
+function drawLightWrap(ctx: CanvasRenderingContext2D, bg: VideoBackground, session: MediaSession, video: HTMLVideoElement, mask: HTMLCanvasElement, w: number, h: number) {
+  const bw = Math.max(1, Math.min(960, Math.round(w / 2)));
+  const bh = Math.max(1, Math.round((bw * h) / w));
+  if (!wrapBufferA) wrapBufferA = document.createElement("canvas");
+  if (!wrapBufferB) wrapBufferB = document.createElement("canvas");
+  for (const b of [wrapBufferA, wrapBufferB]) {
+    if (b.width !== bw || b.height !== bh) {
+      b.width = bw;
+      b.height = bh;
+    }
+  }
+  const a = wrapBufferA.getContext("2d");
+  const b = wrapBufferB.getContext("2d");
+  if (!a || !b) return;
+  const spread = Math.max(2, bw * 0.02);
+  // A = the background region (inverse of the person).
+  a.globalCompositeOperation = "source-over";
+  a.filter = "none";
+  a.clearRect(0, 0, bw, bh);
+  a.fillStyle = "#fff";
+  a.fillRect(0, 0, bw, bh);
+  a.globalCompositeOperation = "destination-out";
+  a.drawImage(mask, 0, 0, bw, bh);
+  // B = that region blurred inward, kept only where the person is → a soft band inside the edge.
+  b.globalCompositeOperation = "source-over";
+  b.clearRect(0, 0, bw, bh);
+  b.filter = `blur(${spread}px)`;
+  b.drawImage(wrapBufferA, 0, 0);
+  b.filter = "none";
+  b.globalCompositeOperation = "destination-in";
+  b.drawImage(mask, 0, 0, bw, bh);
+  // Fill the band with the (blurred) new background.
+  b.globalCompositeOperation = "source-in";
+  b.save();
+  b.filter = `blur(${spread}px)`;
+  b.translate(bw / 2, bh / 2);
+  drawVideoBackground(b, bg.kind === "blur" ? { ...bg, amount: (bg.amount ?? 18) / 2 } : bg, session, video, bw, bh);
+  b.restore();
+  b.globalCompositeOperation = "source-over";
+  ctx.save();
+  ctx.globalAlpha *= 0.55;
+  ctx.drawImage(wrapBufferB, -w / 2, -h / 2, w, h);
+  ctx.restore();
+}
+
 function drawCutout(ctx: CanvasRenderingContext2D, layer: Layer, time: number, opts: Required<RenderOptions>) {
   const p = layer.props as CutoutLayerProps;
   const src = currentComp?.layers.find((l) => l.id === p.sourceLayerId);
@@ -798,7 +851,7 @@ function drawCutout(ctx: CanvasRenderingContext2D, layer: Layer, time: number, o
   const vp = src.props as VideoLayerProps;
   if (!vp.src) return;
   const video = opts.session.getVideo(vp.src, src.id);
-  const mask = getPersonMask(video);
+  const mask = getPersonMask(video, { quality: p.quality ?? vp.background?.quality, edge: p.edge ?? vp.background?.edge });
   if (!mask) return;
   const st = evaluateTransform(src.transform, time);
   const own = evaluateTransform(layer.transform, time);
@@ -1065,10 +1118,10 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
       if (!p.src) break;
       const video = opts.session.getVideo(p.src, layer.id);
       if (p.background) {
-        const mask = getPersonMask(video);
+        const mask = getPersonMask(video, { quality: p.background.quality, edge: p.background.edge });
         if (mask) {
           drawVideoBackground(ctx, p.background, opts.session, video, p.width, p.height);
-          const person = personBuffer(opts.session, video, mask, p.width, p.height, 2);
+          const person = personBuffer(opts.session, video, mask, p.width, p.height, 1.5);
           if (person) {
             // A soft contact shadow seats the person in the new scene instead of looking pasted on.
             ctx.save();
@@ -1077,6 +1130,7 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
             ctx.shadowOffsetY = Math.min(p.width, p.height) * 0.01;
             ctx.drawImage(person, -p.width / 2, -p.height / 2, p.width, p.height);
             ctx.restore();
+            if (p.background.lightWrap !== false) drawLightWrap(ctx, p.background, opts.session, video, mask, p.width, p.height);
           }
           break;
         }

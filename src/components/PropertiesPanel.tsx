@@ -1106,8 +1106,49 @@ const BG_PRESETS: { id: string; label: string; bg: VideoBackground | undefined; 
 ];
 
 /** Replace what's behind the speaker: blur, studio light, a color or an image (on-device segmentation). */
+/** Shared cut-out quality controls (background replacement and person cutouts). */
+function CutQualityFields({
+  quality,
+  edge,
+  lightWrap,
+  showLightWrap = true,
+  onChange,
+}: {
+  quality?: "fast" | "high";
+  edge?: number;
+  lightWrap?: boolean;
+  showLightWrap?: boolean;
+  onChange: (patch: { quality?: "fast" | "high"; edge?: number; lightWrap?: boolean }) => void;
+}) {
+  return (
+    <>
+      <div className="field-row">
+        <label className="field">
+          <span>دقة الفصل</span>
+          <select value={quality ?? "fast"} onChange={(e) => onChange({ quality: e.target.value as "fast" | "high" })}>
+            <option value="fast">سريعة</option>
+            <option value="high">عالية — شعر وملابس أدق (أبطأ شوية)</option>
+          </select>
+        </label>
+        {showLightWrap && (
+          <label className="field field-checkbox">
+            <input type="checkbox" checked={lightWrap !== false} onChange={(e) => onChange({ lightWrap: e.target.checked })} />
+            <span>دمج الإضاءة على الحواف</span>
+          </label>
+        )}
+      </div>
+      <label className="field">
+        <span>الحواف: {(edge ?? 0) < 0 ? "مصغّرة (تشيل الهالة)" : (edge ?? 0) > 0 ? "مكبّرة (تحافظ على الشعر)" : "عادية"}</span>
+        <input type="range" min={-1} max={1} step={0.1} value={edge ?? 0} onChange={(e) => onChange({ edge: Number(e.target.value) })} />
+      </label>
+    </>
+  );
+}
+
 function BackgroundPicker({ value, onChange }: { value?: VideoBackground; onChange: (bg: VideoBackground | undefined) => void }) {
   const fileRef = useRef<HTMLInputElement | null>(null);
+  // Switching background keeps the cut-out quality settings.
+  const keep = (bg: VideoBackground | undefined) => (bg ? { ...bg, quality: value?.quality, edge: value?.edge, lightWrap: value?.lightWrap } : undefined);
   const activeId = !value
     ? "none"
     : value.kind === "image"
@@ -1120,12 +1161,12 @@ function BackgroundPicker({ value, onChange }: { value?: VideoBackground; onChan
       <span className="field-label">🎨 تغيير الخلفية (الشخص ينفصل تلقائيًا)</span>
       <div className="bg-swatches">
         {BG_PRESETS.map((b) => (
-          <button key={b.id} type="button" className={`bg-swatch ${activeId === b.id ? "active" : ""}`} onClick={() => onChange(b.bg)} title={b.label}>
+          <button key={b.id} type="button" className={`bg-swatch ${activeId === b.id ? "active" : ""}`} onClick={() => onChange(keep(b.bg))} title={b.label}>
             <span className="bg-swatch-color" style={{ background: b.swatch }} />
             <span>{b.label}</span>
           </button>
         ))}
-        <button type="button" className={`bg-swatch ${activeId === "color" ? "active" : ""}`} onClick={() => onChange({ kind: "color", color: value?.kind === "color" ? value.color : "#0b5" })}>
+        <button type="button" className={`bg-swatch ${activeId === "color" ? "active" : ""}`} onClick={() => onChange(keep({ kind: "color", color: value?.kind === "color" ? value.color : "#0b5" }))}>
           <span className="bg-swatch-color" style={{ background: value?.kind === "color" ? value.color : "conic-gradient(red,yellow,lime,cyan,blue,magenta,red)" }} />
           <span>لون</span>
         </button>
@@ -1134,13 +1175,14 @@ function BackgroundPicker({ value, onChange }: { value?: VideoBackground; onChan
           <span>صورة</span>
         </button>
       </div>
-      {value?.kind === "color" && <input type="color" value={value.color ?? "#000000"} onChange={(e) => onChange({ kind: "color", color: e.target.value })} />}
+      {value?.kind === "color" && <input type="color" value={value.color ?? "#000000"} onChange={(e) => onChange({ ...value, color: e.target.value })} />}
       {value?.kind === "blur" && (
         <label className="field">
           <span>قوة الضبابية</span>
-          <input type="range" min={4} max={40} value={value.amount ?? 18} onChange={(e) => onChange({ kind: "blur", amount: Number(e.target.value) })} />
+          <input type="range" min={4} max={40} value={value.amount ?? 18} onChange={(e) => onChange({ ...value, amount: Number(e.target.value) })} />
         </label>
       )}
+      {value && <CutQualityFields quality={value.quality} edge={value.edge} lightWrap={value.lightWrap} onChange={(patch) => onChange({ ...value, ...patch })} />}
       <input
         ref={fileRef}
         type="file"
@@ -1151,10 +1193,14 @@ function BackgroundPicker({ value, onChange }: { value?: VideoBackground; onChan
           e.target.value = "";
           if (!file) return;
           const { src } = await storeMediaFile(file);
-          onChange({ kind: "image", src });
+          onChange(keep({ kind: "image", src }));
         }}
       />
-      {value && <p className="hint">أول مرة ياخذ ثواني حتى يحمّل موديل فصل الشخص. الأفضل خلفية التصوير تكون مرتبة والإضاءة على الشخص واضحة.</p>}
+      {value && (
+        <p className="hint">
+          أول مرة ياخذ ثواني حتى يحمّل موديل الفصل. إذا الحواف بيها هالة من الخلفية القديمة، صغّر "الحواف" شوية. إذا الشعر ينقص، كبّرها أو فعّل الدقة العالية.
+        </p>
+      )}
     </div>
   );
 }
@@ -1178,6 +1224,7 @@ function CutoutFields({ props: p, onChange }: { props: CutoutLayerProps; onChang
         </select>
       </label>
       <div className="field-row">
+        <CutQualityFields quality={p.quality} edge={p.edge} showLightWrap={false} onChange={({ quality, edge }) => onChange({ ...(quality ? { quality } : {}), ...(edge !== undefined ? { edge } : {}) })} />
         <label className="field">
           <span>Edge softness (px)</span>
           <NumInput min={0} max={20} value={p.feather} onChange={(e) => onChange({ feather: Math.max(0, parseFloat(e.target.value) || 0) })} />

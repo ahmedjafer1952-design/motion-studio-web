@@ -110,6 +110,9 @@ export interface VideoBackground {
   color2?: string; // studio edge (darker) color
   src?: string; // image background ("idb:" ref)
   amount?: number; // blur strength (px)
+  quality?: "fast" | "high"; // segmentation model: fast, or high-accuracy (hair/clothes)
+  edge?: number; // -1 shrink … +1 grow the person's edge
+  lightWrap?: boolean; // let the new background's light spill onto the edges (default on)
 }
 
 export type VideoLook = "grayscale" | "dim" | "blur";
@@ -130,6 +133,8 @@ export interface CutoutLayerProps {
   sourceLayerId: string;
   feather: number; // px of mask edge softening
   outline?: string; // optional glowing rim color around the person
+  quality?: "fast" | "high";
+  edge?: number;
 }
 
 export interface AudioLayerProps {
