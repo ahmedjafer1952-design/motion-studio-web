@@ -850,3 +850,35 @@ textarea {
   align-items: center;
   gap: 6px;
 }
+.bg-swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  margin: 6px 0;
+}
+.bg-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 2px;
+  font-size: 10px;
+}
+.bg-swatch.active {
+  border-color: var(--accent);
+  background: rgba(79, 140, 255, 0.15);
+}
+.bg-swatch-color {
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.field-label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+}

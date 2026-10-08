@@ -100,6 +100,16 @@ export interface VideoLayerProps {
   muted: boolean;
   fadeBottom?: number; // 0–1: fraction of the bottom edge that fades to transparent (split-screen B-roll)
   look?: VideoLook; // background treatment, usually paired with a person cutout on top
+  background?: VideoBackground; // replace everything behind the person
+}
+
+/** A replacement background behind the (auto-segmented) person in a video layer. */
+export interface VideoBackground {
+  kind: "blur" | "color" | "studio" | "image";
+  color?: string; // color, or the studio light color
+  color2?: string; // studio edge (darker) color
+  src?: string; // image background ("idb:" ref)
+  amount?: number; // blur strength (px)
 }
 
 export type VideoLook = "grayscale" | "dim" | "blur";

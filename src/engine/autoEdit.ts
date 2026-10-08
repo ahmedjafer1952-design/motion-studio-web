@@ -196,6 +196,13 @@ function lighten(hex: string, amount: number): string {
   return `#${mix(m[1])}${mix(m[2])}${mix(m[3])}`;
 }
 
+function darken(hex: string, amount: number): string {
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return hex;
+  const mix = (c: string) => Math.round(parseInt(c, 16) * (1 - amount)).toString(16).padStart(2, "0");
+  return `#${mix(m[1])}${mix(m[2])}${mix(m[3])}`;
+}
+
 function hexToRgba(hex: string, alpha: number): string {
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
   if (!m) return `rgba(20,184,166,${alpha})`;
@@ -287,6 +294,8 @@ export interface EditPlan {
   /** Cutaway slots: the creator drops an image/clip into each placeholder. */
   broll?: { start: number; end: number; description: string }[];
   backgroundLook?: VideoLook | null;
+  /** Replace the real background with a studio backdrop lit in the brand color. */
+  studioBackground?: boolean;
   zooms: { time: number; strength: "light" | "strong" }[];
   sounds: { sound: SoundId; time: number }[];
   colorGrade: ColorGradeId | null;
@@ -550,6 +559,10 @@ export function buildEditFromPlan(
     const reordered = plan.textBehind ? [...fronts, cutout, ...middles, ...brolls] : [...fronts, ...middles, cutout, ...brolls];
     newLayers.length = 0;
     newLayers.push(...reordered);
+  }
+  if (plan.studioBackground && sourceLayer.type === "video") {
+    const base = accent ?? "#3a3f4b";
+    (updatedSourceLayer.props as VideoLayerProps).background = { kind: "studio", color: darken(base, 0.45), color2: "#05060a" };
   }
   if (plan.backgroundLook && sourceLayer.type === "video") {
     (updatedSourceLayer.props as VideoLayerProps).look = plan.backgroundLook;

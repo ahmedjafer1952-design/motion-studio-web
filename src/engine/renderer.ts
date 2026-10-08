@@ -10,6 +10,7 @@ import type {
   ChartLayerProps,
   CutoutLayerProps,
   ArrowLayerProps,
+  VideoBackground,
   Composition as Comp,
   PolygonLayerProps,
   ShapeLayerProps,
@@ -152,10 +153,10 @@ export class MediaSession {
   }
 
   preloadImages(comp: Composition): Promise<void[]> {
-    const sources = comp.layers
-      .filter((l) => l.type === "image")
-      .map((l) => (l.props as ImageLayerProps).src)
-      .filter(Boolean);
+    const sources = [
+      ...comp.layers.filter((l) => l.type === "image").map((l) => (l.props as ImageLayerProps).src),
+      ...comp.layers.filter((l) => l.type === "video").map((l) => (l.props as VideoLayerProps).background?.src ?? ""),
+    ].filter(Boolean);
     return Promise.all(
       sources.map((src) => {
         this.getImage(src);
@@ -730,6 +731,66 @@ let currentComp: Comp | null = null;
 let cutoutBuffer: HTMLCanvasElement | null = null;
 
 /** Draws the person from the source video layer (masked by on-device segmentation) with that layer's transform. */
+/** The person from the current frame (video × mask) in an offscreen buffer of size w×h. */
+function personBuffer(session: MediaSession, video: HTMLVideoElement, mask: HTMLCanvasElement, w: number, h: number, feather: number): HTMLCanvasElement | null {
+  const bw = Math.max(1, Math.min(1920, Math.round(w)));
+  const bh = Math.max(1, Math.min(1920, Math.round(h)));
+  if (!cutoutBuffer) cutoutBuffer = document.createElement("canvas");
+  if (cutoutBuffer.width !== bw || cutoutBuffer.height !== bh) {
+    cutoutBuffer.width = bw;
+    cutoutBuffer.height = bh;
+  }
+  const c = cutoutBuffer.getContext("2d");
+  if (!c) return null;
+  c.globalCompositeOperation = "source-over";
+  c.filter = "none";
+  c.clearRect(0, 0, bw, bh);
+  session.drawVideoFrame(c, video, 0, 0, bw, bh);
+  c.globalCompositeOperation = "destination-in";
+  c.filter = feather > 0 ? `blur(${feather}px)` : "none";
+  c.drawImage(mask, 0, 0, bw, bh);
+  c.filter = "none";
+  c.globalCompositeOperation = "source-over";
+  return cutoutBuffer;
+}
+
+/** Paints a replacement background into the box (-w/2,-h/2,w,h) in the current local space. */
+function drawVideoBackground(ctx: CanvasRenderingContext2D, bg: VideoBackground, session: MediaSession, video: HTMLVideoElement, w: number, h: number) {
+  const x = -w / 2;
+  const y = -h / 2;
+  ctx.save();
+  if (bg.kind === "blur") {
+    // Overscan so the blur doesn't pull dark edges in from outside the frame.
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+    ctx.filter = `blur(${bg.amount ?? 18}px) brightness(0.9)`;
+    session.drawVideoFrame(ctx, video, x - w * 0.05, y - h * 0.05, w * 1.1, h * 1.1);
+  } else if (bg.kind === "color") {
+    ctx.fillStyle = bg.color ?? "#111111";
+    ctx.fillRect(x, y, w, h);
+  } else if (bg.kind === "studio") {
+    // Studio backdrop: a soft light behind the subject's head fading to dark edges.
+    const g = ctx.createRadialGradient(0, -h * 0.12, Math.min(w, h) * 0.05, 0, -h * 0.05, Math.max(w, h) * 0.75);
+    g.addColorStop(0, bg.color ?? "#3a3f4b");
+    g.addColorStop(1, bg.color2 ?? "#07080b");
+    ctx.fillStyle = g;
+    ctx.fillRect(x, y, w, h);
+  } else if (bg.kind === "image" && bg.src) {
+    const img = session.getImage(bg.src);
+    if (img && img.naturalWidth) {
+      const s = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+      const sw = w / s;
+      const sh = h / s;
+      ctx.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, x, y, w, h);
+    } else {
+      ctx.fillStyle = "#111111";
+      ctx.fillRect(x, y, w, h);
+    }
+  }
+  ctx.restore();
+}
+
 function drawCutout(ctx: CanvasRenderingContext2D, layer: Layer, time: number, opts: Required<RenderOptions>) {
   const p = layer.props as CutoutLayerProps;
   const src = currentComp?.layers.find((l) => l.id === p.sourceLayerId);
@@ -744,24 +805,8 @@ function drawCutout(ctx: CanvasRenderingContext2D, layer: Layer, time: number, o
   const alpha = Math.max(0, Math.min(1, st.opacity * own.opacity));
   if (alpha <= 0) return;
 
-  const w = Math.max(1, Math.min(1920, Math.round(vp.width)));
-  const h = Math.max(1, Math.min(1920, Math.round(vp.height)));
-  if (!cutoutBuffer) cutoutBuffer = document.createElement("canvas");
-  if (cutoutBuffer.width !== w || cutoutBuffer.height !== h) {
-    cutoutBuffer.width = w;
-    cutoutBuffer.height = h;
-  }
-  const c = cutoutBuffer.getContext("2d");
-  if (!c) return;
-  c.globalCompositeOperation = "source-over";
-  c.filter = "none";
-  c.clearRect(0, 0, w, h);
-  opts.session.drawVideoFrame(c, video, 0, 0, w, h);
-  c.globalCompositeOperation = "destination-in";
-  c.filter = p.feather > 0 ? `blur(${p.feather}px)` : "none";
-  c.drawImage(mask, 0, 0, w, h);
-  c.filter = "none";
-  c.globalCompositeOperation = "source-over";
+  const person = personBuffer(opts.session, video, mask, vp.width, vp.height, p.feather);
+  if (!person) return;
 
   ctx.save();
   ctx.translate(st.position.x, st.position.y);
@@ -772,7 +817,7 @@ function drawCutout(ctx: CanvasRenderingContext2D, layer: Layer, time: number, o
     ctx.shadowColor = p.outline;
     ctx.shadowBlur = 24;
   }
-  ctx.drawImage(cutoutBuffer, -vp.width / 2, -vp.height / 2, vp.width, vp.height);
+  ctx.drawImage(person, -vp.width / 2, -vp.height / 2, vp.width, vp.height);
   ctx.restore();
 }
 
@@ -1019,6 +1064,24 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
       const p = layer.props as VideoLayerProps;
       if (!p.src) break;
       const video = opts.session.getVideo(p.src, layer.id);
+      if (p.background) {
+        const mask = getPersonMask(video);
+        if (mask) {
+          drawVideoBackground(ctx, p.background, opts.session, video, p.width, p.height);
+          const person = personBuffer(opts.session, video, mask, p.width, p.height, 2);
+          if (person) {
+            // A soft contact shadow seats the person in the new scene instead of looking pasted on.
+            ctx.save();
+            ctx.shadowColor = "rgba(0,0,0,0.45)";
+            ctx.shadowBlur = Math.min(p.width, p.height) * 0.04;
+            ctx.shadowOffsetY = Math.min(p.width, p.height) * 0.01;
+            ctx.drawImage(person, -p.width / 2, -p.height / 2, p.width, p.height);
+            ctx.restore();
+          }
+          break;
+        }
+        // Model still loading: fall through to the plain video for now.
+      }
       if (p.look) ctx.filter = VIDEO_LOOKS[p.look];
       if (p.fadeBottom && p.fadeBottom > 0) {
         drawWithBottomFade(ctx, p.width, p.height, p.fadeBottom, (c, w, h) => opts.session.drawVideoFrame(c, video, 0, 0, w, h));

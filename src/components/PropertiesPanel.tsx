@@ -13,6 +13,7 @@ import type {
   ChartLayerProps,
   CutoutLayerProps,
   ArrowLayerProps,
+  VideoBackground,
   PolygonLayerProps,
   Point,
   ShapeLayerProps,
@@ -690,6 +691,7 @@ function VideoFields({
         <input type="checkbox" checked={p.muted} onChange={(e) => onChange({ muted: e.target.checked })} />
         <span>Mute audio</span>
       </label>
+      {p.src && <BackgroundPicker value={p.background} onChange={(background) => onChange({ background })} />}
       {p.src && (
         <div className="properties-subsection">
           <button type="button" className="primary" onClick={onAddCutout} title="يفصل الشخص عن الخلفية — أي كتابة تحت طبقة الشخص تطلع وراه">
@@ -1089,6 +1091,71 @@ function ArrowFields({ props: p, onChange }: { props: ArrowLayerProps; onChange:
         </label>
       </div>
     </>
+  );
+}
+
+const BG_PRESETS: { id: string; label: string; bg: VideoBackground | undefined; swatch: string }[] = [
+  { id: "none", label: "الأصلية", bg: undefined, swatch: "linear-gradient(135deg,#555,#222)" },
+  { id: "blur", label: "ضبابية", bg: { kind: "blur", amount: 18 }, swatch: "radial-gradient(circle,#9aa,#455)" },
+  { id: "studio", label: "ستوديو", bg: { kind: "studio", color: "#3a3f4b", color2: "#07080b" }, swatch: "radial-gradient(circle,#3a3f4b,#07080b)" },
+  { id: "warm", label: "دافئ", bg: { kind: "studio", color: "#6b4a2e", color2: "#120a05" }, swatch: "radial-gradient(circle,#6b4a2e,#120a05)" },
+  { id: "blue", label: "تقني أزرق", bg: { kind: "studio", color: "#1e4f8f", color2: "#050b18" }, swatch: "radial-gradient(circle,#1e4f8f,#050b18)" },
+  { id: "purple", label: "بنفسجي", bg: { kind: "studio", color: "#5b2a86", color2: "#0c0614" }, swatch: "radial-gradient(circle,#5b2a86,#0c0614)" },
+  { id: "teal", label: "فيروزي", bg: { kind: "studio", color: "#0f766e", color2: "#021412" }, swatch: "radial-gradient(circle,#0f766e,#021412)" },
+  { id: "white", label: "أبيض", bg: { kind: "studio", color: "#ffffff", color2: "#b9bcc4" }, swatch: "radial-gradient(circle,#fff,#b9bcc4)" },
+];
+
+/** Replace what's behind the speaker: blur, studio light, a color or an image (on-device segmentation). */
+function BackgroundPicker({ value, onChange }: { value?: VideoBackground; onChange: (bg: VideoBackground | undefined) => void }) {
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const activeId = !value
+    ? "none"
+    : value.kind === "image"
+      ? "image"
+      : value.kind === "color"
+        ? "color"
+        : BG_PRESETS.find((b) => b.bg && b.bg.kind === value.kind && b.bg.color === value.color)?.id ?? "";
+  return (
+    <div className="properties-subsection">
+      <span className="field-label">🎨 تغيير الخلفية (الشخص ينفصل تلقائيًا)</span>
+      <div className="bg-swatches">
+        {BG_PRESETS.map((b) => (
+          <button key={b.id} type="button" className={`bg-swatch ${activeId === b.id ? "active" : ""}`} onClick={() => onChange(b.bg)} title={b.label}>
+            <span className="bg-swatch-color" style={{ background: b.swatch }} />
+            <span>{b.label}</span>
+          </button>
+        ))}
+        <button type="button" className={`bg-swatch ${activeId === "color" ? "active" : ""}`} onClick={() => onChange({ kind: "color", color: value?.kind === "color" ? value.color : "#0b5" })}>
+          <span className="bg-swatch-color" style={{ background: value?.kind === "color" ? value.color : "conic-gradient(red,yellow,lime,cyan,blue,magenta,red)" }} />
+          <span>لون</span>
+        </button>
+        <button type="button" className={`bg-swatch ${activeId === "image" ? "active" : ""}`} onClick={() => fileRef.current?.click()}>
+          <span className="bg-swatch-color bg-swatch-icon">🖼</span>
+          <span>صورة</span>
+        </button>
+      </div>
+      {value?.kind === "color" && <input type="color" value={value.color ?? "#000000"} onChange={(e) => onChange({ kind: "color", color: e.target.value })} />}
+      {value?.kind === "blur" && (
+        <label className="field">
+          <span>قوة الضبابية</span>
+          <input type="range" min={4} max={40} value={value.amount ?? 18} onChange={(e) => onChange({ kind: "blur", amount: Number(e.target.value) })} />
+        </label>
+      )}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (!file) return;
+          const { src } = await storeMediaFile(file);
+          onChange({ kind: "image", src });
+        }}
+      />
+      {value && <p className="hint">أول مرة ياخذ ثواني حتى يحمّل موديل فصل الشخص. الأفضل خلفية التصوير تكون مرتبة والإضاءة على الشخص واضحة.</p>}
+    </div>
   );
 }
 

@@ -76,7 +76,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
   const [ctaText, setCtaText] = useState("");
   const [brandColor, setBrandColor] = useState(""); // "" = Claude picks
   const [textBehind, setTextBehind] = useState(false);
-  const [bgLook, setBgLook] = useState<"" | VideoLook>("");
+  const [bgLook, setBgLook] = useState<"" | VideoLook | "studio">("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [apiKey, setApiKey] = useState(aiSettings.getApiKey());
   const [accessCode, setAccessCode] = useState(aiSettings.getAccessCode());
@@ -191,7 +191,8 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
       words: res.words,
       emphasis: res.emphasis,
       textBehind: isVideo && textBehind,
-      backgroundLook: isVideo && bgLook ? bgLook : null,
+      backgroundLook: isVideo && bgLook && bgLook !== "studio" ? bgLook : null,
+      studioBackground: isVideo && bgLook === "studio",
     });
     setStep("done");
   };
@@ -403,6 +404,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
                     <option value="grayscale">أبيض وأسود (الشخص ملوّن)</option>
                     <option value="dim">معتّمة</option>
                     <option value="blur">مضبّبة</option>
+                    <option value="studio">🎨 ستوديو بلون الهوية (تغيير الخلفية)</option>
                   </select>
                 </label>
               </div>
