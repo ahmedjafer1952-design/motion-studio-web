@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { importMediaFile } from "./engine/importMedia";
 import { Toolbar } from "./components/Toolbar";
 import { PreviewCanvas } from "./components/PreviewCanvas";
 import { Timeline } from "./components/Timeline/Timeline";
@@ -89,7 +90,17 @@ export default function App() {
         </div>
       )}
       <div className="app-body">
-        <div className="preview-area">
+        <div
+          className="preview-area"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={async (e) => {
+            e.preventDefault();
+            for (const f of Array.from(e.dataTransfer.files)) {
+              const err = await importMediaFile(f);
+              if (err) alert(err);
+            }
+          }}
+        >
           <PreviewCanvas />
         </div>
         <PropertiesPanel />

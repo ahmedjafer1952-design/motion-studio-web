@@ -16,6 +16,7 @@ import type {
   TextLayerProps,
   VideoLayerProps,
 } from "../types";
+import { probeMedia } from "../engine/importMedia";
 import { useEditorStore, type AttachedAudio, type AttachedVideo } from "../state/store";
 import { isSpeechSource, resolveMediaUrl, storeMediaFile } from "../engine/mediaStore";
 import { FONT_CHOICES } from "../engine/fonts";
@@ -491,25 +492,6 @@ function CompositionSettings() {
       </div>
     </div>
   );
-}
-
-/** Reads a media file's duration (and video dimensions) — null if the browser can't decode it. */
-function probeMedia(file: File, kind: "video" | "audio"): Promise<{ duration: number; width: number; height: number } | null> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const el = document.createElement(kind);
-    el.preload = "metadata";
-    const done = (result: { duration: number; width: number; height: number } | null) => {
-      URL.revokeObjectURL(url);
-      resolve(result);
-    };
-    el.onloadedmetadata = () => {
-      const v = el as HTMLVideoElement;
-      done({ duration: Number.isFinite(el.duration) ? el.duration : 0, width: v.videoWidth || 0, height: v.videoHeight || 0 });
-    };
-    el.onerror = () => done(null);
-    el.src = url;
-  });
 }
 
 function VideoFields({

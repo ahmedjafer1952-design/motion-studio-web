@@ -5,6 +5,7 @@ import { canExportVideo, exportCompositionToVideo, ExportCancelledError, extensi
 import { AutoEditDialog } from "./AutoEditDialog";
 import { InvalidProjectError } from "../engine/migrate";
 import { LibraryPanel } from "./LibraryPanel";
+import { importMediaFile } from "../engine/importMedia";
 
 function formatTime(t: number): string {
   const m = Math.floor(t / 60);
@@ -32,6 +33,19 @@ export function Toolbar() {
   const [libraryOpen, setLibraryOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const mediaInputRef = useRef<HTMLInputElement | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const handleMediaChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    setImporting(true);
+    for (const f of files) {
+      const err = await importMediaFile(f);
+      if (err) alert(err);
+    }
+    setImporting(false);
+  };
 
   const handleSave = () => {
     const json = JSON.stringify(project, null, 2);
@@ -95,6 +109,13 @@ export function Toolbar() {
           📂 Load
         </button>
         <input ref={fileInputRef} type="file" accept="application/json" hidden onChange={handleFileChange} />
+      </div>
+
+      <div className="toolbar-group">
+        <button className="primary" onClick={() => mediaInputRef.current?.click()} disabled={importing} title="استورد فيديو أو صوت من جهازك">
+          {importing ? "⏳ جاري الاستيراد…" : "📥 استيراد فيديو"}
+        </button>
+        <input ref={mediaInputRef} type="file" accept="video/*,audio/*,.mp4,.mov,.webm,.mkv,.m4v,.mp3,.wav,.m4a" multiple hidden onChange={handleMediaChange} />
       </div>
 
       <div className="toolbar-group">
