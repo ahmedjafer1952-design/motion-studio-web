@@ -35,7 +35,7 @@ export class MediaSession {
   videos = new Map<string, HTMLVideoElement>();
   audios = new Map<string, HTMLAudioElement>();
   /** Last successfully decoded frame per video, drawn while a seek is in flight so the canvas never flashes black. */
-  frameCache = new Map<HTMLVideoElement, { canvas: HTMLCanvasElement; time: number }>();
+  frameCache = new Map<HTMLVideoElement, { canvas: HTMLCanvasElement; time: number; updatedAt: number }>();
   /** Called when media has a new frame available outside the playback loop (after load or a seek). */
   onFrameReady: (() => void) | null = null;
   private touched = new Set<string>();
@@ -90,20 +90,30 @@ export class MediaSession {
     return audio;
   }
 
-  /** Draws the video's current frame, or its last good frame while it's seeking/buffering. */
+  /**
+   * Draws the video's current frame, or its last good frame while it's seeking/buffering.
+   * The fallback copy is small and refreshed only a few times a second: copying every full-size
+   * phone frame (often 4K) on every tick made playback stutter badly.
+   */
   drawVideoFrame(ctx: CanvasRenderingContext2D, video: HTMLVideoElement, x: number, y: number, w: number, h: number) {
     let cache = this.frameCache.get(video);
-    if (video.readyState >= 2 && video.videoWidth > 0) {
+    const ready = video.readyState >= 2 && video.videoWidth > 0 && !video.seeking;
+    if (ready) {
+      ctx.drawImage(video, x, y, w, h);
+      const now = performance.now();
       if (!cache) {
-        cache = { canvas: document.createElement("canvas"), time: -1 };
+        cache = { canvas: document.createElement("canvas"), time: -1, updatedAt: 0 };
         this.frameCache.set(video, cache);
       }
-      if (cache.time !== video.currentTime || cache.canvas.width !== video.videoWidth) {
-        cache.canvas.width = video.videoWidth;
-        cache.canvas.height = video.videoHeight;
-        cache.canvas.getContext("2d")?.drawImage(video, 0, 0);
+      if (cache.time !== video.currentTime && (video.paused || now - cache.updatedAt > 250)) {
+        const scale = Math.min(1, 640 / video.videoWidth);
+        cache.canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+        cache.canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+        cache.canvas.getContext("2d")?.drawImage(video, 0, 0, cache.canvas.width, cache.canvas.height);
         cache.time = video.currentTime;
+        cache.updatedAt = now;
       }
+      return;
     }
     if (cache && cache.time >= 0) ctx.drawImage(cache.canvas, x, y, w, h);
   }

@@ -43,7 +43,9 @@ export function PreviewCanvas() {
   }, [comp]);
 
   // Draw whenever composition, playhead, or play state changes (covers paused scrubbing + edits).
+  // While playing, the playback loop below draws every frame itself.
   useEffect(() => {
+    if (isPlaying) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -106,22 +108,38 @@ export function PreviewCanvas() {
       lastTsRef.current = null;
       return;
     }
+    // Draws straight to the canvas every frame, but only publishes the playhead to the store
+    // ~12 times a second: re-rendering the whole editor UI 60 times a second made playback lag.
+    let t = useEditorStore.getState().playhead;
+    let lastPublish = 0;
+    let published = t;
     const step = (ts: number) => {
       if (lastTsRef.current == null) lastTsRef.current = ts;
-      const dt = (ts - lastTsRef.current) / 1000;
+      const dt = Math.min(0.1, (ts - lastTsRef.current) / 1000);
       lastTsRef.current = ts;
-      const next = useEditorStore.getState().playhead + dt;
-      if (next >= comp.duration) {
-        setPlayhead(comp.duration);
+      t += dt;
+      const state = useEditorStore.getState();
+      // The user clicked the timeline/ruler mid-playback: jump there.
+      if (Math.abs(state.playhead - published) > 0.001) t = state.playhead;
+      const current = state.project.composition;
+      if (t >= current.duration) {
+        setPlayhead(current.duration);
         pause();
         return;
       }
-      setPlayhead(next);
+      const ctx = canvasRef.current?.getContext("2d");
+      if (ctx) renderComposition(ctx, current, t, { playing: true });
+      if (ts - lastPublish > 80) {
+        lastPublish = ts;
+        setPlayhead(t);
+        published = t;
+      }
       rafRef.current = requestAnimationFrame(step);
     };
     rafRef.current = requestAnimationFrame(step);
     return () => {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      if (t < useEditorStore.getState().project.composition.duration) setPlayhead(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPlaying, comp.duration]);
