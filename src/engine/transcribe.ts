@@ -1,17 +1,6 @@
-import { pipeline, env } from "@xenova/transformers";
 import { resolveMediaUrl } from "./mediaStore";
 
-// Model weights are fetched from the Hugging Face Hub at runtime and cached by the
-// browser (IndexedDB/Cache Storage) — nothing is bundled into the app itself.
-env.allowLocalModels = false;
-
 export type ModelSize = "tiny" | "base" | "small";
-
-const MODEL_IDS: Record<ModelSize, string> = {
-  tiny: "Xenova/whisper-tiny",
-  base: "Xenova/whisper-base",
-  small: "Xenova/whisper-small",
-};
 
 export interface TranscribedWord {
   text: string;
@@ -25,35 +14,51 @@ export interface TranscribeProgress {
   detail?: string;
 }
 
-interface AsrPipeline {
-  (audio: Float32Array, options: Record<string, unknown>): Promise<{
-    chunks?: { text: string; timestamp: [number, number | null] }[];
-  }>;
-}
+type Chunk = { text: string; timestamp: [number, number | null] };
+type WorkerMsg =
+  | { id: number; type: "progress"; progress: TranscribeProgress }
+  | { id: number; type: "done"; chunks: Chunk[] }
+  | { id: number; type: "error"; message: string };
 
-const pipelineCache = new Map<ModelSize, Promise<AsrPipeline>>();
+let worker: Worker | null = null;
+let nextId = 1;
 
-interface TransformersProgressEvent {
-  status: string;
-  progress?: number;
-  file?: string;
-}
-
-async function getAsrPipeline(modelSize: ModelSize, onProgress?: (p: TranscribeProgress) => void) {
-  let cached = pipelineCache.get(modelSize);
-  if (!cached) {
-    cached = pipeline("automatic-speech-recognition", MODEL_IDS[modelSize], {
-      progress_callback: (data: TransformersProgressEvent) => {
-        if (data.status === "progress" && typeof data.progress === "number") {
-          onProgress?.({ phase: "loading-model", progress: data.progress / 100, detail: data.file });
-        } else if (data.status === "initiate" || data.status === "download") {
-          onProgress?.({ phase: "loading-model", detail: data.file });
-        }
-      },
-    }) as unknown as Promise<AsrPipeline>;
-    pipelineCache.set(modelSize, cached);
-  }
-  return cached;
+/** Runs Whisper in a Web Worker (kept alive so the loaded model is reused between runs). */
+function runInWorker(
+  pcm: Float32Array,
+  modelSize: ModelSize,
+  language: string,
+  onProgress?: (p: TranscribeProgress) => void
+): Promise<Chunk[]> {
+  if (!worker) worker = new Worker(new URL("./transcribe.worker.ts", import.meta.url), { type: "module" });
+  const w = worker;
+  const id = nextId++;
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      w.removeEventListener("message", onMessage);
+      w.removeEventListener("error", onError);
+    };
+    const onMessage = (e: MessageEvent<WorkerMsg>) => {
+      const m = e.data;
+      if (m.id !== id) return;
+      if (m.type === "progress") onProgress?.(m.progress);
+      else {
+        cleanup();
+        if (m.type === "done") resolve(m.chunks);
+        else reject(new Error(`Speech recognition failed: ${m.message}`));
+      }
+    };
+    const onError = () => {
+      cleanup();
+      // The worker died (usually out of memory) — start a fresh one next time.
+      w.terminate();
+      if (worker === w) worker = null;
+      reject(new Error("Speech recognition ran out of memory. Try the Tiny model or a shorter clip."));
+    };
+    w.addEventListener("message", onMessage);
+    w.addEventListener("error", onError);
+    w.postMessage({ id, pcm, modelSize, language }, [pcm.buffer]);
+  });
 }
 
 async function decodeTo16kMono(src: string): Promise<Float32Array> {
@@ -93,18 +98,8 @@ export async function transcribeMediaSource(
   onProgress?.({ phase: "decoding-audio" });
   const pcm = await decodeTo16kMono(src);
 
-  const asr = await getAsrPipeline(modelSize, onProgress);
-
-  onProgress?.({ phase: "transcribing" });
-  const result = await asr(pcm, {
-    language,
-    task: "transcribe",
-    return_timestamps: "word",
-    chunk_length_s: 30,
-    stride_length_s: 5,
-  });
-
-  const chunks = result.chunks ?? [];
+  onProgress?.({ phase: "loading-model" });
+  const chunks = await runInWorker(pcm, modelSize, language, onProgress);
   const words: TranscribedWord[] = [];
   for (const c of chunks) {
     const text = c.text.trim();
