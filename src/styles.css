@@ -760,3 +760,93 @@ textarea {
   font-size: 11px;
   opacity: 0.8;
 }
+
+/* --- Auto Edit wizard --- */
+.modal.modal-wide {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+.mode-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.mode-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px;
+  text-align: right;
+  border-radius: 8px;
+}
+.mode-card.active {
+  border-color: var(--accent);
+  background: rgba(79, 140, 255, 0.15);
+}
+.mode-card-title {
+  font-weight: 700;
+  color: #fff;
+}
+.mode-card-desc {
+  font-size: 11px;
+  opacity: 0.75;
+  line-height: 1.5;
+}
+.note-chips,
+.review-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.chip {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border, #3a3a44);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+}
+.chip-btn {
+  cursor: pointer;
+}
+.chip-btn:hover {
+  border-color: var(--accent);
+}
+.review-chips {
+  margin: 8px 0 12px;
+}
+.steps {
+  padding-inline-start: 20px;
+  line-height: 1.9;
+}
+.steps li.active {
+  color: #fff;
+  font-weight: 700;
+}
+.steps li.done {
+  opacity: 0.6;
+}
+.inline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 560px) {
+  .mode-cards {
+    grid-template-columns: 1fr;
+  }
+}
+.modal textarea {
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.modal-wide .field > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

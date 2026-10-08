@@ -1,23 +1,57 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useEditorStore } from "../state/store";
-import type { AudioLayerProps, Layer, VideoLayerProps } from "../types";
-import type { ModelSize, TranscribeProgress } from "../engine/transcribe";
-import { planFromRules, type Pace } from "../engine/autoEdit";
+import type { AudioLayerProps, Layer, VideoLayerProps, VideoLook } from "../types";
+import type { ModelSize, TranscribeProgress, TranscribedWord } from "../engine/transcribe";
+import { planFromRules, type EditPlan, type Pace } from "../engine/autoEdit";
 import { aiSettings, fetchClaudeEdit, planFromClaude } from "../engine/aiEdit/client";
 import { isSpeechSource } from "../engine/mediaStore";
 import { buildManualPrompt, parseManualReply } from "../engine/aiEdit/manual";
-import type { TranscribedWord } from "../engine/transcribe";
+import { applyCaptionEdits, captionLines, emphasisKeys, linesToText } from "../engine/captionReview";
+
+// Auto Edit as a short wizard: set up → (transcribe + Claude) → review captions and what will be
+// added → apply as ONE undo step. Every screen says what's happening and what to do next.
 
 type Mode = "chat" | "claude" | "rules";
+type Step = "setup" | "working" | "chat" | "review" | "done";
 type Phase = TranscribeProgress | { phase: "claude" };
 
-function progressLabel(p: Phase): string {
-  if (p.phase === "claude") return "Claude is editing your video…";
-  if (p.phase === "loading-model") {
-    return p.progress != null ? `Loading speech model ${Math.round(p.progress * 100)}%…` : "Loading speech model…";
-  }
-  if (p.phase === "decoding-audio") return "Reading audio…";
-  return "Transcribing speech…";
+const MODES: { id: Mode; icon: string; title: string; desc: string }[] = [
+  { id: "chat", icon: "💬", title: "اشتراكك بـ Claude", desc: "مجاني — تنسخ طلب وتلصقه بمحادثة Claude وترجع الجواب" },
+  { id: "claude", icon: "🤖", title: "Claude تلقائي", desc: "يحتاج مفتاح API — كلشي يصير بضغطة وحدة" },
+  { id: "rules", icon: "⚡", title: "سريع بدون ذكاء", desc: "قواعد ثابتة، فوري ومجاني، بس أقل احترافية" },
+];
+
+const NOTE_CHIPS: { label: string; text: string }[] = [
+  { label: "تعليمي", text: "فيديو تعليمي، ستايل احترافي هادي." },
+  { label: "إعلان", text: "إعلان، خليه حماسي وسريع وركّز على العروض والأسعار." },
+  { label: "قصة", text: "قصة أو معلومة، جو درامي وفخم." },
+  { label: "كبسولة زجاج", text: "الكابشن كبسولة زجاج." },
+  { label: "النقاط كروت", text: "النقاط اللي يعددها خليها كروت." },
+  { label: "اقترح صور", text: "اقترح صور توضيحية للأمثلة اللي يذكرها." },
+  { label: "بدون أصوات", text: "بدون مؤثرات صوتية." },
+];
+
+function phaseLabel(p: Phase | null): string {
+  if (!p) return "";
+  if (p.phase === "claude") return "Claude ديمنتج الفيديو…";
+  if (p.phase === "loading-model") return p.progress != null ? `تحميل موديل الكلام ${Math.round(p.progress * 100)}%` : "تحميل موديل الكلام…";
+  if (p.phase === "decoding-audio") return "قراءة الصوت…";
+  return "تحويل الكلام لنص… (ياخذ وقت حسب طول الفيديو)";
+}
+
+function planSummary(plan: EditPlan): string[] {
+  const out: string[] = [`كابشن (${plan.words.length} كلمة)`];
+  if (plan.title) out.push(`عنوان: «${plan.title}»`);
+  const items = plan.lists.reduce((n, l) => n + l.items.length, 0);
+  if (items) out.push(`${items} كروت للنقاط`);
+  if (plan.numbers.length) out.push(`${plan.numbers.length} رقم كبير`);
+  if (plan.keyPhrases.length) out.push(`${plan.keyPhrases.length} عبارات مميزة`);
+  if (plan.broll?.length) out.push(`${plan.broll.length} أماكن لصور توضيحية`);
+  if (plan.zooms.length) out.push(`${plan.zooms.length} زوم`);
+  if (plan.sounds.length) out.push(`${plan.sounds.length} مؤثرات صوتية`);
+  if (plan.colorGrade) out.push("تلوين سينمائي");
+  if (plan.cta) out.push(`دعوة بالنهاية: «${plan.cta}»`);
+  return out;
 }
 
 export function AutoEditDialog({ onClose }: { onClose: () => void }) {
@@ -30,7 +64,8 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
       (l.type === "video" || l.type === "audio") && isSpeechSource((l.props as VideoLayerProps | AudioLayerProps).src)
   );
 
-  const [mode, setMode] = useState<Mode>("chat");
+  const [step, setStep] = useState<Step>("setup");
+  const [mode, setMode] = useState<Mode>(aiSettings.getApiKey() ? "claude" : "chat");
   const [sourceId, setSourceId] = useState(sourceCandidates[0]?.id ?? "");
   const [pace, setPace] = useState<Pace>("medium");
   const [modelSize, setModelSize] = useState<ModelSize>("small"); // Iraqi speech needs the more accurate model
@@ -41,58 +76,65 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
   const [ctaText, setCtaText] = useState("");
   const [brandColor, setBrandColor] = useState(""); // "" = Claude picks
   const [textBehind, setTextBehind] = useState(false);
-  const [bgLook, setBgLook] = useState<"" | "grayscale" | "dim" | "blur">("");
-  const [progress, setProgress] = useState<Phase | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [summary, setSummary] = useState<string | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
+  const [bgLook, setBgLook] = useState<"" | VideoLook>("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [apiKey, setApiKey] = useState(aiSettings.getApiKey());
   const [accessCode, setAccessCode] = useState(aiSettings.getAccessCode());
-  const [manual, setManual] = useState<{ sourceId: string; words: TranscribedWord[]; prompt: string } | null>(null);
+
+  const [progress, setProgress] = useState<Phase | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [words, setWords] = useState<TranscribedWord[]>([]);
+  const [prompt, setPrompt] = useState("");
   const [reply, setReply] = useState("");
   const [copied, setCopied] = useState(false);
+  const [plan, setPlan] = useState<EditPlan | null>(null);
+  const [claudeSummary, setClaudeSummary] = useState("");
+  const [captionText, setCaptionText] = useState("");
+
+  const source = sourceCandidates.find((l) => l.id === sourceId);
+  const isVideo = source?.type === "video";
+  const lines = useMemo(() => (plan ? captionLines(plan.words) : []), [plan]);
 
   // Transcription can't be interrupted mid-inference, so closing the dialog discards its result instead.
   const discardedRef = useRef(false);
   useEffect(() => {
-    // Reset on (re)mount: React's dev StrictMode mounts twice and would otherwise leave this stuck on.
-    discardedRef.current = false;
+    discardedRef.current = false; // reset on (re)mount — dev StrictMode mounts twice
     return () => {
       discardedRef.current = true;
     };
   }, []);
 
+  const toReview = (p: EditPlan, summary: string) => {
+    setPlan(p);
+    setClaudeSummary(summary);
+    setCaptionText(linesToText(captionLines(p.words)));
+    setStep("review");
+  };
+
   const handleRun = async () => {
-    const source = sourceCandidates.find((l) => l.id === sourceId);
     if (!source) return;
+    if (mode === "claude") {
+      aiSettings.setApiKey(apiKey);
+      aiSettings.setAccessCode(accessCode);
+    }
     setError(null);
-    setSummary(null);
+    setStep("working");
     setProgress({ phase: "loading-model" });
     try {
       const { transcribeMediaSource } = await import("../engine/transcribe");
-      const srcProps = source.props as VideoLayerProps | AudioLayerProps;
-      const words = await transcribeMediaSource(srcProps.src, { modelSize, onProgress: setProgress });
+      const w = await transcribeMediaSource((source.props as VideoLayerProps | AudioLayerProps).src, { modelSize, onProgress: setProgress });
       if (discardedRef.current) return;
-      if (words.length === 0) {
-        setError("No speech was detected in this clip, so there's nothing to build an edit from.");
-        return;
-      }
+      if (w.length === 0) throw new Error("ما انسمع أي كلام بهذا المقطع، فما أكدر أسوي مونتاج عليه.");
+      setWords(w);
 
       if (mode === "rules") {
-        applyEditPlan(
-          source.id,
-          planFromRules(words, {
-            pace,
-            title: includeTitle ? titleText.trim() || undefined : undefined,
-            cta: includeCta ? ctaText.trim() || undefined : undefined,
-          })
-        );
-        onClose();
+        const title = includeTitle ? titleText.trim() || undefined : undefined;
+        const cta = includeCta ? ctaText.trim() || undefined : undefined;
+        toReview(planFromRules(w, { pace, title, cta }), "مونتاج سريع بالقواعد الثابتة.");
         return;
       }
-
       const req = {
-        words,
+        words: w,
         pace,
         instructions,
         title: { enabled: includeTitle, text: titleText },
@@ -101,75 +143,108 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
         brandColor: brandColor || undefined,
       };
       if (mode === "chat") {
-        setManual({ sourceId: source.id, words, prompt: buildManualPrompt(req) });
+        setPrompt(buildManualPrompt(req));
+        setStep("chat");
         return;
       }
       setProgress({ phase: "claude" });
       const out = await fetchClaudeEdit(req);
       if (discardedRef.current) return;
-      applyEditPlan(source.id, { ...planFromClaude(words, out), textBehind, backgroundLook: bgLook || null });
-      setSummary(out.summary || "Done.");
+      toReview(planFromClaude(w, out), out.summary);
     } catch (err) {
-      if (!discardedRef.current) setError(err instanceof Error ? err.message : String(err));
+      if (discardedRef.current) return;
+      setError(err instanceof Error ? err.message : String(err));
+      setStep("setup");
     } finally {
       if (!discardedRef.current) setProgress(null);
     }
   };
 
-  const saveSettings = () => {
-    aiSettings.setApiKey(apiKey);
-    aiSettings.setAccessCode(accessCode);
-    setShowSettings(false);
-  };
-
   const copyPrompt = async () => {
-    if (!manual) return;
     try {
-      await navigator.clipboard.writeText(manual.prompt);
+      await navigator.clipboard.writeText(prompt);
       setCopied(true);
     } catch {
-      setError("Couldn't copy automatically — select the text in the box and press Ctrl+C.");
+      setError("ما انتسخ تلقائيًا — اضغط داخل المربع، Ctrl+A ثم Ctrl+C.");
     }
   };
 
-  const applyReply = () => {
-    if (!manual) return;
+  const readReply = () => {
     try {
       const out = parseManualReply(reply);
-      applyEditPlan(manual.sourceId, { ...planFromClaude(manual.words, out), textBehind, backgroundLook: bgLook || null });
-      setSummary(out.summary || "تم.");
+      setError(null);
+      toReview(planFromClaude(words, out), out.summary);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   };
 
-  if (manual && !summary) {
+  const apply = () => {
+    if (!plan || !source) return;
+    const res = applyCaptionEdits(lines, emphasisKeys(lines, plan.words, plan.emphasis), captionText);
+    if ("error" in res) {
+      setError(res.error);
+      return;
+    }
+    applyEditPlan(source.id, {
+      ...plan,
+      words: res.words,
+      emphasis: res.emphasis,
+      textBehind: isVideo && textBehind,
+      backgroundLook: isVideo && bgLook ? bgLook : null,
+    });
+    setStep("done");
+  };
+
+  const appendNote = (text: string) => setInstructions((v) => (v.includes(text) ? v : (v.trim() ? v.trim() + "\n" : "") + text));
+
+  // --- Screens --------------------------------------------------------------
+
+  if (step === "done") {
     return (
       <div className="modal-backdrop">
         <div className="modal" dir="rtl">
-          <h3>💬 المونتاج عن طريق اشتراك Claude مالتك</h3>
-          <p className="hint">
-            <b>١.</b> انسخ الطلب، وافتح Claude (claude.ai أو تطبيق Claude) بمحادثة جديدة، والصقه وارسله.
-          </p>
-          <textarea className="manual-prompt" dir="auto" rows={5} readOnly value={manual.prompt} onFocus={(e) => e.target.select()} />
+          <h3>✅ المونتاج انضاف</h3>
+          {claudeSummary && <p className="claude-summary">{claudeSummary}</p>}
+          <ul className="hint">
+            <li>شغّل الفيديو وشوف النتيجة.</li>
+            <li>أي عنصر ما عجبك: اضغط عليه بالشاشة أو بالتايملاين وعدّله أو امسحه.</li>
+            <li>إذا عندك أماكن صور توضيحية (إطار منقّط): اضغط عليه واختار صورة.</li>
+            <li>ما عجبك كله؟ Ctrl+Z يرجّع كلشي بخطوة وحدة.</li>
+          </ul>
           <div className="modal-actions">
-            <button type="button" className="primary" onClick={copyPrompt}>
-              {copied ? "✅ انتسخ" : "📋 انسخ الطلب"}
+            <button type="button" className="primary" onClick={onClose}>
+              تمام
             </button>
-            <a className="button-link" href="https://claude.ai/new" target="_blank" rel="noreferrer">
-              🔗 افتح claude.ai
-            </a>
           </div>
-          <p className="hint">
-            <b>٢.</b> لما يجاوب Claude، انسخ جوابه كله (زر النسخ تحت الجواب) والصقه هنا:
-          </p>
-          <textarea dir="ltr" rows={5} placeholder='{ "emphasis": [...], ... }' value={reply} onChange={(e) => setReply(e.target.value)} />
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "review" && plan) {
+    return (
+      <div className="modal-backdrop">
+        <div className="modal modal-wide" dir="rtl">
+          <h3>٣/٣ — راجع قبل التطبيق</h3>
+          {claudeSummary && <p className="claude-summary">{claudeSummary}</p>}
+          <div className="review-chips">
+            {planSummary(plan).map((s) => (
+              <span key={s} className="chip">
+                {s}
+              </span>
+            ))}
+          </div>
+          <label className="field">
+            <span>الكابشن — صحّح أي كلمة غلط (كل سطر يطلع بوقته؛ لا تضيف ولا تمسح أسطر)</span>
+            <textarea dir="rtl" rows={Math.min(12, Math.max(5, lines.length))} value={captionText} onChange={(e) => setCaptionText(e.target.value)} />
+          </label>
           {error && <p className="hint error">{error}</p>}
           <div className="modal-actions">
-            <button type="button" onClick={onClose}>
-              إلغاء
+            <button type="button" onClick={() => setStep(mode === "chat" ? "chat" : "setup")}>
+              رجوع
             </button>
-            <button type="button" className="primary" onClick={applyReply} disabled={!reply.trim()}>
+            <button type="button" className="primary" onClick={apply}>
               ✨ طبّق المونتاج
             </button>
           </div>
@@ -178,18 +253,37 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
     );
   }
 
-  if (summary) {
+  if (step === "chat") {
     return (
       <div className="modal-backdrop">
-        <div className="modal">
-          <h3>✨ Claude finished the edit</h3>
-          <p className="claude-summary" dir="auto">
-            {summary}
-          </p>
-          <p className="hint">Everything was added as one step — press Ctrl+Z to undo it all, or tweak any layer.</p>
+        <div className="modal modal-wide" dir="rtl">
+          <h3>٢/٣ — خلّي Claude يمنتج</h3>
+          <ol className="steps">
+            <li>
+              اضغط <b>📋 انسخ الطلب</b>، وافتح <b>claude.ai</b> بمحادثة جديدة، والصقه وارسله.
+            </li>
+            <li>لما يخلص الجواب، اضغط زر النسخ اللي تحت جواب Claude، والصقه بالمربع الثاني.</li>
+          </ol>
+          <div className="modal-actions" style={{ justifyContent: "flex-start" }}>
+            <button type="button" className="primary" onClick={copyPrompt}>
+              {copied ? "✅ انتسخ" : "📋 انسخ الطلب"}
+            </button>
+            <a className="button-link" href="https://claude.ai/new" target="_blank" rel="noreferrer">
+              🔗 افتح claude.ai
+            </a>
+          </div>
+          <textarea className="manual-prompt" dir="auto" rows={3} readOnly value={prompt} onFocus={(e) => e.target.select()} />
+          <label className="field">
+            <span>الصق جواب Claude هنا</span>
+            <textarea dir="ltr" rows={6} placeholder='{ "corrections": [...], ... }' value={reply} onChange={(e) => setReply(e.target.value)} />
+          </label>
+          {error && <p className="hint error">{error}</p>}
           <div className="modal-actions">
-            <button type="button" className="primary" onClick={onClose}>
-              Done
+            <button type="button" onClick={onClose}>
+              إلغاء
+            </button>
+            <button type="button" className="primary" onClick={readReply} disabled={!reply.trim()}>
+              التالي ←
             </button>
           </div>
         </div>
@@ -197,88 +291,106 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
     );
   }
 
-  return (
-    <div className="modal-backdrop" onClick={() => !progress && onClose()}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>✨ Auto Edit</h3>
-
-        <div className="mode-toggle">
-          <button type="button" className={mode === "chat" ? "active" : ""} onClick={() => setMode("chat")}>
-            💬 اشتراكي بـ Claude
-          </button>
-          <button type="button" className={mode === "claude" ? "active" : ""} onClick={() => setMode("claude")}>
-            🤖 Claude
-          </button>
-          <button type="button" className={mode === "rules" ? "active" : ""} onClick={() => setMode("rules")}>
-            ⚡ Quick rules (offline)
-          </button>
+  if (step === "working") {
+    const transcribing = progress && progress.phase !== "claude";
+    return (
+      <div className="modal-backdrop">
+        <div className="modal" dir="rtl">
+          <h3>⏳ دنشتغل…</h3>
+          <ol className="steps">
+            <li className={transcribing ? "active" : "done"}>تحويل الكلام لنص {transcribing ? `— ${phaseLabel(progress)}` : "✓"}</li>
+            {mode === "claude" && <li className={progress?.phase === "claude" ? "active" : ""}>Claude يقرر المونتاج</li>}
+            <li>تراجع النتيجة وتطبّقها</li>
+          </ol>
+          <p className="hint">خلّي هاي النافذة مفتوحة. أول مرة تحمّل موديل الكلام تاخذ دقيقة أو أكثر.</p>
+          <div className="modal-actions">
+            <button type="button" onClick={onClose}>
+              إلغاء
+            </button>
+          </div>
         </div>
-        <p className="hint">
-          {mode === "chat"
-            ? "Uses your Claude subscription: the app prepares a request, you paste it into a Claude chat, then paste the answer back. No API key or credit needed."
-            : mode === "claude"
-            ? "Claude listens to the transcript, fixes dialect words, and decides the highlights, numbers, lists, punchlines, zooms, sounds and color — like a human editor."
-            : "Fixed rules (ordinal words, digits, pauses). Instant and free, but not smart."}
-        </p>
+      </div>
+    );
+  }
+
+  // Setup
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal modal-wide" dir="rtl" onClick={(e) => e.stopPropagation()}>
+        <h3>✨ مونتاج تلقائي — ١/٣ الإعداد</h3>
 
         {sourceCandidates.length === 0 ? (
-          <p className="hint">Add a video or audio layer with a file first, then come back here.</p>
+          <p className="hint">ضيف فيديو أو صوت فيه كلام أول (📥 استيراد فيديو)، وبعدين ارجع هنا.</p>
         ) : (
           <>
-            <label className="field">
-              <span>Source</span>
-              <select value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
-                {sourceCandidates.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="mode-cards">
+              {MODES.map((m) => (
+                <button key={m.id} type="button" className={`mode-card ${mode === m.id ? "active" : ""}`} onClick={() => setMode(m.id)}>
+                  <span className="mode-card-title">
+                    {m.icon} {m.title}
+                  </span>
+                  <span className="mode-card-desc">{m.desc}</span>
+                </button>
+              ))}
+            </div>
+
+            {sourceCandidates.length > 1 && (
+              <label className="field">
+                <span>الفيديو</span>
+                <select value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
+                  {sourceCandidates.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             {mode !== "rules" && (
               <label className="field">
-                <span>Tell Claude about the video (optional)</span>
+                <span>شنو الفيديو وشلون تريده؟ (كلّما تكتب أكثر، يطلع أقرب للي ببالك)</span>
                 <textarea
-                  dir="auto"
+                  dir="rtl"
                   rows={3}
-                  placeholder="مثلاً: إعلان لمطعم ببغداد، خليه حماسي وركّز على الأسعار"
+                  placeholder="مثلاً: فيديو تعليمي لطلاب السادس عن الفيزياء، ستايل احترافي هادي، النقاط كروت، واقترح صور توضيحية."
                   value={instructions}
                   onChange={(e) => setInstructions(e.target.value)}
                 />
+                <div className="note-chips">
+                  {NOTE_CHIPS.map((c) => (
+                    <button key={c.label} type="button" className="chip chip-btn" onClick={() => appendNote(c.text)}>
+                      + {c.label}
+                    </button>
+                  ))}
+                </div>
               </label>
             )}
 
             <div className="field-row">
               <label className="field">
-                <span>Pace</span>
+                <span>الإيقاع</span>
                 <select value={pace} onChange={(e) => setPace(e.target.value as Pace)}>
-                  <option value="calm">Calm</option>
-                  <option value="medium">Medium</option>
-                  <option value="strong">Strong</option>
+                  <option value="calm">هادي</option>
+                  <option value="medium">متوسط</option>
+                  <option value="strong">سريع وحماسي</option>
                 </select>
               </label>
-              <label className="field">
-                <span>Speech model</span>
-                <select value={modelSize} onChange={(e) => setModelSize(e.target.value as ModelSize)}>
-                  <option value="tiny">Tiny (fast)</option>
-                  <option value="base">Base</option>
-                  <option value="small">Small (most accurate)</option>
-                </select>
-              </label>
+              {mode !== "rules" && (
+                <label className="field">
+                  <span>لون الهوية</span>
+                  <div className="inline-row">
+                    <label className="field-checkbox">
+                      <input type="checkbox" checked={!brandColor} onChange={(e) => setBrandColor(e.target.checked ? "" : "#6d28d9")} />
+                      <span>Claude يختار</span>
+                    </label>
+                    {brandColor && <input type="color" value={brandColor} onChange={(e) => setBrandColor(e.target.value)} />}
+                  </div>
+                </label>
+              )}
             </div>
 
-            {mode !== "rules" && (
-              <div className="field-row">
-                <label className="field field-checkbox">
-                  <input type="checkbox" checked={!brandColor} onChange={(e) => setBrandColor(e.target.checked ? "" : "#6d28d9")} />
-                  <span>لون الهوية: Claude يختار</span>
-                </label>
-                {brandColor && <input type="color" value={brandColor} onChange={(e) => setBrandColor(e.target.value)} title="لون الهوية — كل التمييز والصناديق والتوهج بهذا اللون" />}
-              </div>
-            )}
-
-            {sourceCandidates.find((l) => l.id === sourceId)?.type === "video" && (
+            {isVideo && (
               <div className="field-row">
                 <label className="field field-checkbox">
                   <input type="checkbox" checked={textBehind} onChange={(e) => setTextBehind(e.target.checked)} />
@@ -297,68 +409,44 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
             )}
 
             <div className="field-row">
-              <label className="field field-checkbox">
-                <input type="checkbox" checked={includeTitle} onChange={(e) => setIncludeTitle(e.target.checked)} />
-                <span>Title at start</span>
+              <label className="field">
+                <span>
+                  <input type="checkbox" checked={includeTitle} onChange={(e) => setIncludeTitle(e.target.checked)} /> عنوان بالبداية
+                </span>
+                {includeTitle && <input dir="rtl" value={titleText} placeholder={mode === "rules" ? "اكتب العنوان" : "فارغ = Claude يكتبه"} onChange={(e) => setTitleText(e.target.value)} />}
               </label>
-              <label className="field field-checkbox">
-                <input type="checkbox" checked={includeCta} onChange={(e) => setIncludeCta(e.target.checked)} />
-                <span>CTA at end</span>
+              <label className="field">
+                <span>
+                  <input type="checkbox" checked={includeCta} onChange={(e) => setIncludeCta(e.target.checked)} /> دعوة بالنهاية (CTA)
+                </span>
+                {includeCta && <input dir="rtl" value={ctaText} placeholder={mode === "rules" ? "مثلاً: تابعنا" : "فارغ = Claude يكتبها"} onChange={(e) => setCtaText(e.target.value)} />}
               </label>
             </div>
-            {includeTitle && (
-              <label className="field">
-                <span>Title text</span>
-                <input
-                  dir="auto"
-                  value={titleText}
-                  placeholder={mode !== "rules" ? "Leave empty and Claude writes one" : "اسم القناة"}
-                  onChange={(e) => setTitleText(e.target.value)}
-                />
-              </label>
-            )}
-            {includeCta && (
-              <label className="field">
-                <span>CTA text</span>
-                <input
-                  dir="auto"
-                  value={ctaText}
-                  placeholder={mode !== "rules" ? "Leave empty and Claude writes one" : "تابعنا"}
-                  onChange={(e) => setCtaText(e.target.value)}
-                />
-              </label>
-            )}
 
-            {mode === "claude" && (
+            <button type="button" className="link-btn" onClick={() => setShowAdvanced((v) => !v)}>
+              ⚙️ إعدادات متقدمة {showAdvanced ? "▲" : "▼"}
+            </button>
+            {(showAdvanced || (mode === "claude" && !aiSettings.getApiKey())) && (
               <div className="claude-settings">
-                <button type="button" className="link-btn" onClick={() => setShowSettings((v) => !v)}>
-                  🔑 Claude connection {aiSettings.getApiKey() ? "(personal key saved)" : ""}
-                </button>
-                {showSettings && (
+                <label className="field">
+                  <span>دقة تحويل الكلام</span>
+                  <select value={modelSize} onChange={(e) => setModelSize(e.target.value as ModelSize)}>
+                    <option value="small">عالية (أنصح بيها للعراقي)</option>
+                    <option value="base">متوسطة</option>
+                    <option value="tiny">سريعة (أقل دقة — للأجهزة الضعيفة)</option>
+                  </select>
+                </label>
+                {mode === "claude" && (
                   <>
                     <label className="field">
-                      <span>Your Claude API key (optional)</span>
-                      <input
-                        type="password"
-                        autoComplete="off"
-                        placeholder="sk-ant-…"
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                      />
+                      <span>مفتاح Claude API (يبدي بـ sk-ant-)</span>
+                      <input type="password" autoComplete="off" placeholder="sk-ant-…" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
                     </label>
-                    <p className="hint">
-                      Saved only in this browser and sent straight to Anthropic. Leave it empty if the site's server is
-                      set up with a key (ANTHROPIC_API_KEY in .env.local or the hosting settings).
-                    </p>
                     <label className="field">
-                      <span>Access code (only if the server asks for one)</span>
+                      <span>كود الدخول (بس إذا الموقع المنشور يطلبه)</span>
                       <input type="password" autoComplete="off" value={accessCode} onChange={(e) => setAccessCode(e.target.value)} />
                     </label>
-                    <div className="modal-actions">
-                      <button type="button" onClick={saveSettings}>
-                        Save connection settings
-                      </button>
-                    </div>
+                    <p className="hint">المفتاح ينحفظ بس بهذا المتصفح. اتركه فارغ إذا السيرفر بيه مفتاح.</p>
                   </>
                 )}
               </div>
@@ -370,10 +458,10 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
 
         <div className="modal-actions">
           <button type="button" onClick={onClose}>
-            Cancel
+            إلغاء
           </button>
-          <button type="button" className="primary" onClick={handleRun} disabled={!sourceId || !!progress}>
-            {progress ? progressLabel(progress) : mode === "chat" ? "✨ Prepare request for Claude" : mode === "claude" ? "✨ Edit with Claude" : "✨ Generate"}
+          <button type="button" className="primary" onClick={handleRun} disabled={!source}>
+            التالي ←
           </button>
         </div>
       </div>

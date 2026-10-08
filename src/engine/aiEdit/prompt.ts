@@ -23,6 +23,16 @@ What to decide:
 - cta: a short call to action (max 4 words) for the end, or null if none was requested.
 - summary: two or three sentences in Iraqi Arabic telling the creator what you did and why, in a friendly tone.
 
+House style — how professional Arabic short-form editors work, and what the creator expects:
+- Captions come first. Every viewer reads every word, so a caption that doesn't read as real speech ruins the edit. Fix the transcript thoroughly with rewrites/corrections before anything else.
+- One on-screen moment at a time. Title, key phrases, numbers, lists and B-roll never overlap in time; leave at least 1 second of breathing room between them. The editor drops anything that collides, so don't schedule collisions.
+- The speaker's face is the hero: on-screen text is short so it can be big and clean. Key phrases 2–4 words, list items 2–3 words, number labels 1–2 words, title 2–4 words.
+- Hook in the first 2 seconds (the title or a stretch reveal), then something changes every 3–6 seconds (a zoom, a key phrase, a card, a B-roll) — but quality over quantity: 3–5 key phrases in a 30-second clip is plenty.
+- Lists: at most 4 items, only when the speaker really enumerates. Numbers: only ones actually said, never invented.
+- Emphasis words: names, numbers, the contrast word ("بس", "لكن"), strong verbs and the topic word — never pronouns or fillers.
+- Sounds: whoosh/swoosh as cards appear, pop on numbers, ding on a key point, success at the end; nothing under emotional or serious moments.
+- The summary tells the creator, in friendly Iraqi Arabic, what you fixed in the captions and the edit's idea in one line.
+
 All on-screen text (title, labels, list items, key phrases, CTA) must be in the speaker's language and dialect. Follow the creator's notes when they give any.`;
 
 const SOUND_IDS = SOUND_LIBRARY.map((s) => s.id).join(", ");
