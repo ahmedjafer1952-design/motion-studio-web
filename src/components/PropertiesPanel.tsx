@@ -11,6 +11,7 @@ import type {
   Layer,
   OverlayLayerProps,
   ChartLayerProps,
+  CutoutLayerProps,
   PolygonLayerProps,
   Point,
   ShapeLayerProps,
@@ -159,6 +160,7 @@ export function PropertiesPanel() {
   const setStaticValue = useEditorStore((s) => s.setStaticValue);
   const applyMotionPreset = useEditorStore((s) => s.applyMotionPreset);
   const attachVideo = useEditorStore((s) => s.attachVideo);
+  const addPersonCutout = useEditorStore((s) => s.addPersonCutout);
   const attachAudio = useEditorStore((s) => s.attachAudio);
   const comp = useEditorStore((s) => s.project.composition);
 
@@ -234,6 +236,9 @@ export function PropertiesPanel() {
         {layer.type === "glass" && (
           <GlassFields props={layer.props as GlassLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
         )}
+        {layer.type === "cutout" && (
+          <CutoutFields props={layer.props as CutoutLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
+        )}
         {layer.type === "chart" && (
           <ChartFields props={layer.props as ChartLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
         )}
@@ -248,6 +253,7 @@ export function PropertiesPanel() {
             props={layer.props as VideoLayerProps}
             onChange={(p) => updateLayerProps(layer.id, p)}
             onAttach={(media) => attachVideo(layer.id, media)}
+            onAddCutout={() => addPersonCutout(layer.id)}
             onFitDuration={(naturalDuration, trimIn) =>
               updateLayerTiming(layer.id, layer.startTime, layer.startTime + Math.max(0.1, naturalDuration - trimIn))
             }
@@ -611,11 +617,13 @@ function VideoFields({
   onChange,
   onFitDuration,
   onAttach,
+  onAddCutout,
 }: {
   props: VideoLayerProps;
   onChange: (p: Partial<VideoLayerProps>) => void;
   onFitDuration: (naturalDuration: number, trimIn: number) => void;
   onAttach: (media: AttachedVideo) => void;
+  onAddCutout: () => void;
 }) {
   const [status, setStatus] = useState<string | null>(null);
   const handleFile = async (file: File) => {
@@ -678,6 +686,22 @@ function VideoFields({
         <input type="checkbox" checked={p.muted} onChange={(e) => onChange({ muted: e.target.checked })} />
         <span>Mute audio</span>
       </label>
+      {p.src && (
+        <div className="properties-subsection">
+          <button type="button" className="primary" onClick={onAddCutout} title="يفصل الشخص عن الخلفية — أي كتابة تحت طبقة الشخص تطلع وراه">
+            👤 كتابة ورا الشخص (فصل الشخص)
+          </button>
+          <label className="field">
+            <span>Background look (pair with the person cutout)</span>
+            <select value={p.look ?? ""} onChange={(e) => onChange({ look: (e.target.value || undefined) as VideoLayerProps["look"] })}>
+              <option value="">Natural</option>
+              <option value="grayscale">Black &amp; white</option>
+              <option value="dim">Darkened</option>
+              <option value="blur">Blurred</option>
+            </select>
+          </label>
+        </div>
+      )}
       <label className="field">
         <span>Fade bottom edge (0–1, for split-screen B-roll)</span>
         <NumInput min={0} max={1} step={0.05} value={p.fadeBottom ?? 0} onChange={(e) => onChange({ fadeBottom: Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)) || undefined })} />
@@ -1025,6 +1049,39 @@ function GlassFields({ props: p, onChange }: { props: GlassLayerProps; onChange:
       </div>
       <p className="hint">Blurs whatever is already drawn behind it (video, shapes…) — a real frosted-glass look.</p>
       <p className="hint">Rotation isn't supported on glass panels (position, scale and opacity still work).</p>
+    </>
+  );
+}
+
+function CutoutFields({ props: p, onChange }: { props: CutoutLayerProps; onChange: (p: Partial<CutoutLayerProps>) => void }) {
+  const layers = useEditorStore((s) => s.project.composition.layers);
+  const videos = layers.filter((l) => l.type === "video");
+  return (
+    <>
+      <p className="hint">
+        يرسم الشخص من الفيديو فوق الطبقات اللي تحته — أي كتابة أو شكل تحت هاي الطبقة يطلع ورا الشخص. الفصل يصير على جهازك بالذكاء الاصطناعي.
+      </p>
+      <label className="field">
+        <span>Person from</span>
+        <select value={p.sourceLayerId} onChange={(e) => onChange({ sourceLayerId: e.target.value })}>
+          {videos.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="field-row">
+        <label className="field">
+          <span>Edge softness (px)</span>
+          <NumInput min={0} max={20} value={p.feather} onChange={(e) => onChange({ feather: Math.max(0, parseFloat(e.target.value) || 0) })} />
+        </label>
+        <label className="field field-checkbox">
+          <input type="checkbox" checked={!!p.outline} onChange={(e) => onChange({ outline: e.target.checked ? "#ffffff" : undefined })} />
+          <span>Glow rim</span>
+        </label>
+        {p.outline && <input type="color" value={p.outline} onChange={(e) => onChange({ outline: e.target.value })} />}
+      </div>
     </>
   );
 }

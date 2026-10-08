@@ -16,6 +16,7 @@ const LAYER_TYPES: LayerType[] = [
   "glass",
   "overlay",
   "chart",
+  "cutout",
 ];
 
 export class InvalidProjectError extends Error {}

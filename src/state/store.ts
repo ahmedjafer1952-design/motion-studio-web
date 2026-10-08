@@ -50,6 +50,8 @@ interface EditorState {
 
   addLayer: (type: LayerType) => void;
   addLayerWithProps: (type: LayerType, propsPatch: Record<string, unknown>, durationOverride?: number) => void;
+  /** Adds a person cutout of a video layer on top of everything, so text can sit "behind" the speaker. */
+  addPersonCutout: (videoLayerId: string) => void;
   removeLayer: (layerId: string) => void;
   duplicateLayer: (layerId: string) => void;
   /** Moves a layer (its whole position path, keyframes included) by dx/dy from where it was when the gesture began. */
@@ -224,6 +226,24 @@ export const useEditorStore = create<EditorState>((set, get) => {
 
     addLayer: (type) => {
       const layer = createLayer(type, get().project.composition);
+      commit(
+        (p) => ({ ...p, composition: { ...p.composition, layers: [layer, ...p.composition.layers] } }),
+        { selectedLayerId: layer.id }
+      );
+    },
+
+    addPersonCutout: (videoLayerId) => {
+      const comp = get().project.composition;
+      const src = comp.layers.find((l) => l.id === videoLayerId);
+      if (!src || src.type !== "video") return;
+      const base = createLayer("cutout", comp);
+      const layer: Layer = {
+        ...base,
+        name: `${src.name} — Person`,
+        startTime: src.startTime,
+        endTime: src.endTime,
+        props: { sourceLayerId: src.id, feather: 2 } as Layer["props"],
+      };
       commit(
         (p) => ({ ...p, composition: { ...p.composition, layers: [layer, ...p.composition.layers] } }),
         { selectedLayerId: layer.id }

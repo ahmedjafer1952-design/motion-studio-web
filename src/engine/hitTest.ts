@@ -74,7 +74,7 @@ function contains(b: LayerBounds, x: number, y: number): boolean {
 /** Front-most layer under the point. Full-frame overlays are skipped so they don't swallow every click. */
 export function hitTestLayers(comp: Composition, time: number, x: number, y: number): Layer | null {
   for (const layer of comp.layers) {
-    if (layer.type === "overlay") continue;
+    if (layer.type === "overlay" || layer.type === "cutout") continue;
     const b = layerBounds(layer, comp, time);
     if (b && contains(b, x, y)) return layer;
   }

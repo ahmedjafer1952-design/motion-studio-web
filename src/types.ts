@@ -36,7 +36,8 @@ export type LayerType =
   | "caption"
   | "glass"
   | "overlay"
-  | "chart";
+  | "chart"
+  | "cutout";
 
 export interface TextLayerProps {
   content: string; // wrap a word in [brackets] to render it in emphasisColor
@@ -96,6 +97,16 @@ export interface VideoLayerProps {
   naturalDuration: number; // source video's own duration, seconds
   muted: boolean;
   fadeBottom?: number; // 0–1: fraction of the bottom edge that fades to transparent (split-screen B-roll)
+  look?: VideoLook; // background treatment, usually paired with a person cutout on top
+}
+
+export type VideoLook = "grayscale" | "dim" | "blur";
+
+/** The person from another video layer, cut out of their background, drawn exactly over them. */
+export interface CutoutLayerProps {
+  sourceLayerId: string;
+  feather: number; // px of mask edge softening
+  outline?: string; // optional glowing rim color around the person
 }
 
 export interface AudioLayerProps {
@@ -180,7 +191,8 @@ export interface Layer {
     | CaptionLayerProps
     | GlassLayerProps
     | OverlayLayerProps
-    | ChartLayerProps;
+    | ChartLayerProps
+    | CutoutLayerProps;
 }
 
 export type ColorGradeId =

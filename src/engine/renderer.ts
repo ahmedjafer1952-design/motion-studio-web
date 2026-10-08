@@ -8,6 +8,8 @@ import type {
   ImageLayerProps,
   OverlayLayerProps,
   ChartLayerProps,
+  CutoutLayerProps,
+  Composition as Comp,
   PolygonLayerProps,
   ShapeLayerProps,
   StarLayerProps,
@@ -16,6 +18,7 @@ import type {
 } from "../types";
 import { evaluateTransform } from "./evaluate";
 import { drawChart } from "./chart";
+import { getPersonMask } from "./segmentation";
 import { getColorGrade } from "./colorGrade";
 import { resolveMediaUrl } from "./mediaStore";
 
@@ -715,6 +718,63 @@ function drawWithBottomFade(ctx: CanvasRenderingContext2D, w: number, h: number,
   ctx.drawImage(fadeBuffer, -w / 2, -h / 2, w, h);
 }
 
+const VIDEO_LOOKS: Record<NonNullable<VideoLayerProps["look"]>, string> = {
+  grayscale: "grayscale(1) contrast(1.05)",
+  dim: "brightness(0.55)",
+  blur: "blur(10px) brightness(0.85)",
+};
+
+/** Comp being rendered, so a cutout can find its source video layer. */
+let currentComp: Comp | null = null;
+let cutoutBuffer: HTMLCanvasElement | null = null;
+
+/** Draws the person from the source video layer (masked by on-device segmentation) with that layer's transform. */
+function drawCutout(ctx: CanvasRenderingContext2D, layer: Layer, time: number, opts: Required<RenderOptions>) {
+  const p = layer.props as CutoutLayerProps;
+  const src = currentComp?.layers.find((l) => l.id === p.sourceLayerId);
+  if (!src || src.type !== "video" || time < src.startTime || time > src.endTime) return;
+  const vp = src.props as VideoLayerProps;
+  if (!vp.src) return;
+  const video = opts.session.getVideo(vp.src, src.id);
+  const mask = getPersonMask(video);
+  if (!mask) return;
+  const st = evaluateTransform(src.transform, time);
+  const own = evaluateTransform(layer.transform, time);
+  const alpha = Math.max(0, Math.min(1, st.opacity * own.opacity));
+  if (alpha <= 0) return;
+
+  const w = Math.max(1, Math.min(1920, Math.round(vp.width)));
+  const h = Math.max(1, Math.min(1920, Math.round(vp.height)));
+  if (!cutoutBuffer) cutoutBuffer = document.createElement("canvas");
+  if (cutoutBuffer.width !== w || cutoutBuffer.height !== h) {
+    cutoutBuffer.width = w;
+    cutoutBuffer.height = h;
+  }
+  const c = cutoutBuffer.getContext("2d");
+  if (!c) return;
+  c.globalCompositeOperation = "source-over";
+  c.filter = "none";
+  c.clearRect(0, 0, w, h);
+  opts.session.drawVideoFrame(c, video, 0, 0, w, h);
+  c.globalCompositeOperation = "destination-in";
+  c.filter = p.feather > 0 ? `blur(${p.feather}px)` : "none";
+  c.drawImage(mask, 0, 0, w, h);
+  c.filter = "none";
+  c.globalCompositeOperation = "source-over";
+
+  ctx.save();
+  ctx.translate(st.position.x, st.position.y);
+  ctx.rotate((st.rotation * Math.PI) / 180);
+  ctx.scale(st.scale.x, st.scale.y);
+  ctx.globalAlpha = alpha;
+  if (p.outline) {
+    ctx.shadowColor = p.outline;
+    ctx.shadowBlur = 24;
+  }
+  ctx.drawImage(cutoutBuffer, -vp.width / 2, -vp.height / 2, vp.width, vp.height);
+  ctx.restore();
+}
+
 function drawGlassPanel(ctx: CanvasRenderingContext2D, layer: Layer, time: number) {
   if (time < layer.startTime || time > layer.endTime) return;
   const t = evaluateTransform(layer.transform, time);
@@ -817,6 +877,9 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
   } else if (layer.type === "glass") {
     drawGlassPanel(ctx, layer, time);
     return;
+  } else if (layer.type === "cutout") {
+    if (active) drawCutout(ctx, layer, time, opts);
+    return;
   }
 
   if (!active) return;
@@ -884,6 +947,7 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
       const p = layer.props as VideoLayerProps;
       if (!p.src) break;
       const video = opts.session.getVideo(p.src, layer.id);
+      if (p.look) ctx.filter = VIDEO_LOOKS[p.look];
       if (p.fadeBottom && p.fadeBottom > 0) {
         drawWithBottomFade(ctx, p.width, p.height, p.fadeBottom, (c, w, h) => opts.session.drawVideoFrame(c, video, 0, 0, w, h));
       } else {
@@ -913,6 +977,7 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
 export function renderComposition(ctx: CanvasRenderingContext2D, comp: Composition, time: number, opts: RenderOptions = { playing: false }) {
   const resolvedOpts: Required<RenderOptions> = { playing: opts.playing, session: opts.session ?? defaultSession };
   resolvedOpts.session.beginFrame();
+  currentComp = comp;
   ctx.save();
   ctx.clearRect(0, 0, comp.width, comp.height);
   ctx.fillStyle = comp.backgroundColor;

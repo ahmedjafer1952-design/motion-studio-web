@@ -1,4 +1,4 @@
-import type { GlassLayerProps, CaptionLayerProps, CaptionStyle, CaptionWord, ColorGradeId, Composition, Layer, TextLayerProps } from "../types";
+import type { VideoLayerProps, VideoLook, GlassLayerProps, CaptionLayerProps, CaptionStyle, CaptionWord, ColorGradeId, Composition, Layer, TextLayerProps } from "../types";
 import type { SoundId } from "./sounds";
 import { createLayer } from "./factory";
 import { makeRect, makeText } from "./builders";
@@ -256,6 +256,9 @@ export interface EditPlan {
   keyPhrases: { text: string; time: number; look?: KeyPhraseLook }[];
   /** One brand color for highlights, boxes and glows; null = the default neon/red pairing. */
   accent?: string | null;
+  /** Put titles, numbers and key phrases behind the speaker (needs a video source). */
+  textBehind?: boolean;
+  backgroundLook?: VideoLook | null;
   zooms: { time: number; strength: "light" | "strong" }[];
   sounds: { sound: SoundId; time: number }[];
   colorGrade: ColorGradeId | null;
@@ -468,6 +471,24 @@ export function buildEditFromPlan(
     });
   scaleKfs.sort((a, b) => a.time - b.time);
   updatedSourceLayer.transform.scale = { static: baseScale, keyframes: scaleKfs };
+
+  if ((plan.textBehind || plan.backgroundLook) && sourceLayer.type === "video") {
+    // Order (front → back): captions, lists, CTA, sounds · the person · titles, numbers, key phrases.
+    const front = (l: Layer) => l.name === "Auto Captions" || l.name.startsWith("Auto List") || l.name.startsWith("Auto CTA") || l.type === "audio";
+    const cutout = createLayer("cutout", comp);
+    cutout.name = "Auto Person (text behind)";
+    cutout.startTime = sourceLayer.startTime;
+    cutout.endTime = sourceLayer.endTime;
+    cutout.props = { sourceLayerId: sourceLayer.id, feather: 2 };
+    // Without "text behind", the cutout just keeps the speaker in natural color over a B&W/dim/blurred
+    // background, so it sits at the very back of the new layers.
+    const reordered = plan.textBehind ? [...newLayers.filter(front), cutout, ...newLayers.filter((l) => !front(l))] : [...newLayers, cutout];
+    newLayers.length = 0;
+    newLayers.push(...reordered);
+  }
+  if (plan.backgroundLook && sourceLayer.type === "video") {
+    (updatedSourceLayer.props as VideoLayerProps).look = plan.backgroundLook;
+  }
 
   const compPatch: Partial<Composition> = {};
   if (sourceLayer.endTime > comp.duration) compPatch.duration = sourceLayer.endTime;

@@ -5,6 +5,7 @@ import type {
   LayerType,
   OverlayLayerProps,
   ChartLayerProps,
+  CutoutLayerProps,
   Point,
   Project,
   ShapeLayerProps,
@@ -71,6 +72,8 @@ export function defaultProps(type: LayerType): Layer["props"] {
       };
     case "overlay":
       return { effect: "grain", intensity: 0.5, width: 1280, height: 720 } as OverlayLayerProps;
+    case "cutout":
+      return { sourceLayerId: "", feather: 2 } as CutoutLayerProps;
     case "chart":
       return {
         kind: "bar",

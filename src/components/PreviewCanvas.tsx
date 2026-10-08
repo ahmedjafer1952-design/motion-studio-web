@@ -4,6 +4,7 @@ import { defaultSession, renderComposition } from "../engine/renderer";
 import { drawSelectionOutline, hitTestLayers, layerBounds } from "../engine/hitTest";
 import { ensureFontsLoaded } from "../engine/fonts";
 import { subscribeCustomFonts } from "../engine/customFonts";
+import { onSegmenterReady } from "../engine/segmentation";
 
 export function PreviewCanvas() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -37,9 +38,11 @@ export function PreviewCanvas() {
     const redraw = () => setFrameTick((n) => n + 1);
     document.fonts?.addEventListener("loadingdone", redraw);
     const unsubscribe = subscribeCustomFonts(redraw);
+    const unsubscribeSeg = onSegmenterReady(redraw);
     return () => {
       document.fonts?.removeEventListener("loadingdone", redraw);
       unsubscribe();
+      unsubscribeSeg();
     };
   }, []);
 

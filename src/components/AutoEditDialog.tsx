@@ -40,6 +40,8 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
   const [includeCta, setIncludeCta] = useState(true);
   const [ctaText, setCtaText] = useState("");
   const [brandColor, setBrandColor] = useState(""); // "" = Claude picks
+  const [textBehind, setTextBehind] = useState(false);
+  const [bgLook, setBgLook] = useState<"" | "grayscale" | "dim" | "blur">("");
   const [progress, setProgress] = useState<Phase | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
@@ -105,7 +107,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
       setProgress({ phase: "claude" });
       const out = await fetchClaudeEdit(req);
       if (discardedRef.current) return;
-      applyEditPlan(source.id, planFromClaude(words, out));
+      applyEditPlan(source.id, { ...planFromClaude(words, out), textBehind, backgroundLook: bgLook || null });
       setSummary(out.summary || "Done.");
     } catch (err) {
       if (!discardedRef.current) setError(err instanceof Error ? err.message : String(err));
@@ -134,7 +136,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
     if (!manual) return;
     try {
       const out = parseManualReply(reply);
-      applyEditPlan(manual.sourceId, planFromClaude(manual.words, out));
+      applyEditPlan(manual.sourceId, { ...planFromClaude(manual.words, out), textBehind, backgroundLook: bgLook || null });
       setSummary(out.summary || "تم.");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -273,6 +275,24 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
                   <span>لون الهوية: Claude يختار</span>
                 </label>
                 {brandColor && <input type="color" value={brandColor} onChange={(e) => setBrandColor(e.target.value)} title="لون الهوية — كل التمييز والصناديق والتوهج بهذا اللون" />}
+              </div>
+            )}
+
+            {sourceCandidates.find((l) => l.id === sourceId)?.type === "video" && (
+              <div className="field-row">
+                <label className="field field-checkbox">
+                  <input type="checkbox" checked={textBehind} onChange={(e) => setTextBehind(e.target.checked)} />
+                  <span>👤 الكتابة ورا الشخص</span>
+                </label>
+                <label className="field">
+                  <span>الخلفية</span>
+                  <select value={bgLook} onChange={(e) => setBgLook(e.target.value as typeof bgLook)}>
+                    <option value="">طبيعية</option>
+                    <option value="grayscale">أبيض وأسود (الشخص ملوّن)</option>
+                    <option value="dim">معتّمة</option>
+                    <option value="blur">مضبّبة</option>
+                  </select>
+                </label>
               </div>
             )}
 
