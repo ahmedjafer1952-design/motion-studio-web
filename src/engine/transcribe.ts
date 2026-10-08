@@ -111,7 +111,8 @@ export async function transcribeMediaSource(
     if (!text) continue;
     const start = c.timestamp[0] ?? (words.length ? words[words.length - 1].end : 0);
     const end = c.timestamp[1] ?? start + 0.3;
-    words.push({ text, start, end });
+    words.push({ text, start, end: Math.max(end, start + 0.05) });
   }
-  return words;
+  // Chunk boundaries can yield slightly out-of-order timestamps; captions assume sorted words.
+  return words.sort((a, b) => a.start - b.start);
 }

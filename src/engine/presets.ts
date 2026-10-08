@@ -1,6 +1,5 @@
 import type { Composition, Easing, Keyframe, Layer, Point } from "../types";
 import { makeId } from "../utils/id";
-import { evaluateTransform } from "./evaluate";
 
 export type PresetId =
   | "fadeIn"
@@ -45,13 +44,26 @@ function kf<T>(time: number, value: T, easing: Easing = "easeOut"): Keyframe<T> 
   return { id: makeId("kf"), time, value, easing };
 }
 
-/** Returns a new layer with the chosen preset's keyframes applied, based on the layer's resting pose at its startTime. */
+type TransformKey = "position" | "scale" | "rotation" | "opacity";
+const TRANSFORM_KEYS: TransformKey[] = ["position", "scale", "rotation", "opacity"];
+
+/**
+ * Returns a new layer with the chosen preset's keyframes applied around the layer's resting pose
+ * (each property's static value — not its animated value, which a previous preset may have zeroed).
+ * Existing keyframes outside the preset's time window are kept, so presets stack (fade in + fade out).
+ */
 export function applyPresetToLayer(layer: Layer, presetId: PresetId, comp: Composition): Layer {
-  const base = evaluateTransform(layer.transform, layer.startTime);
+  const base = {
+    position: layer.transform.position.static,
+    scale: layer.transform.scale.static,
+    rotation: layer.transform.rotation.static,
+    opacity: layer.transform.opacity.static,
+  };
   const start = layer.startTime;
   const end = layer.endTime;
   const dur = Math.max(0.1, end - start);
   const clone: Layer = JSON.parse(JSON.stringify(layer));
+  const untouched = { ...clone.transform };
 
   switch (presetId) {
     case "fadeIn": {
@@ -174,6 +186,17 @@ export function applyPresetToLayer(layer: Layer, presetId: PresetId, comp: Compo
       };
       break;
     }
+  }
+
+  for (const key of TRANSFORM_KEYS) {
+    const next = clone.transform[key] as { static: unknown; keyframes: Keyframe<unknown>[] };
+    if (next === untouched[key] || next.keyframes.length === 0) continue;
+    const times = next.keyframes.map((k) => k.time);
+    const from = Math.min(...times) - 1e-6;
+    const to = Math.max(...times) + 1e-6;
+    const kept = (layer.transform[key].keyframes as Keyframe<unknown>[]).filter((k) => k.time < from || k.time > to);
+    next.keyframes = [...kept, ...next.keyframes].sort((a, b) => a.time - b.time);
+    next.static = layer.transform[key].static;
   }
 
   return clone;

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState, type InputHTMLAttributes } from "react";
 import type {
   AnimatablePropKey,
   AudioLayerProps,
@@ -17,7 +17,8 @@ import type {
   VideoLayerProps,
 } from "../types";
 import { useEditorStore, type AttachedAudio, type AttachedVideo } from "../state/store";
-import { storeMediaFile } from "../engine/mediaStore";
+import { resolveMediaUrl, storeMediaFile } from "../engine/mediaStore";
+import { FONT_CHOICES } from "../engine/fonts";
 import { evaluateTransform } from "../engine/evaluate";
 import { PROPERTY_COLORS } from "./Timeline/constants";
 import type { ModelSize, TranscribeProgress } from "../engine/transcribe";
@@ -40,6 +41,7 @@ function AnimRow({
   const layer = useEditorStore((s) => s.project.composition.layers.find((l) => l.id === layerId));
   const addKeyframe = useEditorStore((s) => s.addKeyframe);
   const removeKeyframe = useEditorStore((s) => s.removeKeyframe);
+  const clearKeyframes = useEditorStore((s) => s.clearKeyframes);
   const updateKeyframe = useEditorStore((s) => s.updateKeyframe);
   const setPlayhead = useEditorStore((s) => s.setPlayhead);
   if (!layer) return null;
@@ -64,7 +66,7 @@ function AnimRow({
             title="Stop animating (clears all keyframes)"
             onClick={() => {
               if (confirm(`Remove all keyframes for ${label}?`)) {
-                anim.keyframes.forEach((k) => removeKeyframe(layerId, propKey, k.id));
+                clearKeyframes(layerId, propKey);
               }
             }}
           >
@@ -103,10 +105,38 @@ function AnimRow({
   );
 }
 
+/**
+ * A number input that only commits valid numbers: clearing the field to retype it, or typing "-",
+ * no longer pushes 0/NaN into the project. The draft resets to the real value on blur.
+ */
+function NumInput({
+  value,
+  onChange,
+  onBlur,
+  ...rest
+}: Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "type"> & { value: number | undefined }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <input
+      {...rest}
+      type="number"
+      value={draft ?? (value ?? "")}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        if (Number.isFinite(parseFloat(e.target.value))) onChange?.(e);
+      }}
+      onBlur={(e) => {
+        setDraft(null);
+        onBlur?.(e);
+      }}
+    />
+  );
+}
+
 function NumberField({ value, onChange, step = 1, suffix }: { value: number; onChange: (v: number) => void; step?: number; suffix?: string }) {
   return (
     <label className="number-field">
-      <input type="number" value={Number.isFinite(value) ? round(value) : 0} step={step} onChange={(e) => onChange(parseFloat(e.target.value) || 0)} />
+      <NumInput value={Number.isFinite(value) ? round(value) : 0} step={step} onChange={(e) => onChange(parseFloat(e.target.value) || 0)} />
       {suffix && <span>{suffix}</span>}
     </label>
   );
@@ -150,8 +180,7 @@ export function PropertiesPanel() {
         <div className="field-row">
           <label className="field">
             <span>Start (s)</span>
-            <input
-              type="number"
+            <NumInput
               step={0.1}
               value={layer.startTime}
               onChange={(e) => updateLayerTiming(layer.id, parseFloat(e.target.value) || 0, layer.endTime)}
@@ -159,8 +188,7 @@ export function PropertiesPanel() {
           </label>
           <label className="field">
             <span>End (s)</span>
-            <input
-              type="number"
+            <NumInput
               step={0.1}
               value={layer.endTime}
               onChange={(e) => updateLayerTiming(layer.id, layer.startTime, parseFloat(e.target.value) || 0)}
@@ -274,31 +302,93 @@ export function PropertiesPanel() {
   );
 }
 
+function FontSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const known = FONT_CHOICES.some((f) => f.value === value);
+  return (
+    <label className="field">
+      <span>Font</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {!known && <option value={value}>{value}</option>}
+        {FONT_CHOICES.map((f) => (
+          <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>
+            {f.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function TextFields({ props: p, onChange }: { props: TextLayerProps; onChange: (p: Partial<TextLayerProps>) => void }) {
+  const isCounter = p.countTo != null;
   return (
     <>
-      <label className="field">
-        <span>Text</span>
-        <textarea value={p.content} onChange={(e) => onChange({ content: e.target.value })} />
-      </label>
+      {!isCounter && (
+        <label className="field">
+          <span>Text — wrap a word in [brackets] to highlight it</span>
+          <textarea dir="auto" value={p.content} onChange={(e) => onChange({ content: e.target.value })} />
+        </label>
+      )}
+      <FontSelect value={p.fontFamily} onChange={(fontFamily) => onChange({ fontFamily })} />
       <div className="field-row">
         <label className="field">
           <span>Size</span>
-          <input type="number" value={p.fontSize} onChange={(e) => onChange({ fontSize: parseFloat(e.target.value) || 1 })} />
+          <NumInput min={1} value={p.fontSize} onChange={(e) => onChange({ fontSize: Math.max(1, parseFloat(e.target.value) || 1) })} />
         </label>
         <label className="field">
           <span>Color</span>
           <input type="color" value={p.color} onChange={(e) => onChange({ color: e.target.value })} />
         </label>
+        {p.content.includes("[") && !isCounter && (
+          <label className="field">
+            <span>Highlight</span>
+            <input type="color" value={p.emphasisColor ?? "#ffd166"} onChange={(e) => onChange({ emphasisColor: e.target.value })} />
+          </label>
+        )}
       </div>
-      <label className="field">
-        <span>Align</span>
-        <select value={p.align} onChange={(e) => onChange({ align: e.target.value as TextLayerProps["align"] })}>
-          <option value="left">Left</option>
-          <option value="center">Center</option>
-          <option value="right">Right</option>
-        </select>
-      </label>
+      <div className="field-row">
+        <label className="field">
+          <span>Align</span>
+          <select value={p.align} onChange={(e) => onChange({ align: e.target.value as TextLayerProps["align"] })}>
+            <option value="left">Left</option>
+            <option value="center">Center</option>
+            <option value="right">Right</option>
+          </select>
+        </label>
+        <label className="field field-checkbox">
+          <input type="checkbox" checked={!!p.bold} onChange={(e) => onChange({ bold: e.target.checked })} />
+          <span>Bold</span>
+        </label>
+      </div>
+      {isCounter ? (
+        <div className="field-row">
+          <label className="field">
+            <span>Count to</span>
+            <NumInput value={p.countTo} onChange={(e) => onChange({ countTo: parseFloat(e.target.value) || 0 })} />
+          </label>
+          <label className="field">
+            <span>Over (s)</span>
+            <NumInput
+              min={0.1}
+              step={0.1}
+              value={p.countDuration ?? 1.5}
+              onChange={(e) => onChange({ countDuration: Math.max(0.1, parseFloat(e.target.value) || 0.1) })}
+            />
+          </label>
+        </div>
+      ) : (
+        <label className="field">
+          <span>Typewriter speed (letters/sec, 0 = off)</span>
+          <NumInput
+            min={0}
+            value={p.revealSpeed ?? 0}
+            onChange={(e) => {
+              const v = Math.max(0, parseFloat(e.target.value) || 0);
+              onChange({ revealSpeed: v > 0 ? v : undefined });
+            }}
+          />
+        </label>
+      )}
     </>
   );
 }
@@ -309,11 +399,11 @@ function ShapeFields({ props: p, onChange }: { props: ShapeLayerProps; onChange:
       <div className="field-row">
         <label className="field">
           <span>Width</span>
-          <input type="number" value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
+          <NumInput value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
         </label>
         <label className="field">
           <span>Height</span>
-          <input type="number" value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
+          <NumInput value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
         </label>
       </div>
       <div className="field-row">
@@ -324,7 +414,7 @@ function ShapeFields({ props: p, onChange }: { props: ShapeLayerProps; onChange:
         {"radius" in p && (
           <label className="field">
             <span>Radius</span>
-            <input type="number" value={p.radius ?? 0} onChange={(e) => onChange({ radius: parseFloat(e.target.value) || 0 })} />
+            <NumInput value={p.radius ?? 0} onChange={(e) => onChange({ radius: parseFloat(e.target.value) || 0 })} />
           </label>
         )}
       </div>
@@ -350,8 +440,7 @@ function CompositionSettings() {
         <h4>Project</h4>
         <label className="field">
           <span>Length (seconds)</span>
-          <input
-            type="number"
+          <NumInput
             min={0.5}
             step={0.5}
             value={Number(comp.duration.toFixed(2))}
@@ -388,7 +477,18 @@ function CompositionSettings() {
           vertical for phone videos). Changing the frame size doesn't move existing layers.
         </p>
       </div>
-      <p className="hint">Select a layer to edit its properties.</p>
+      <div className="properties-section">
+        <h4>Shortcuts</h4>
+        <p className="hint shortcuts">
+          Click a layer on the preview to select it, drag to move it.
+          <br />
+          Space — play / pause · Delete — remove layer
+          <br />
+          Ctrl+D — duplicate · Arrows — nudge (Shift = 10px)
+          <br />
+          Ctrl+Z / Ctrl+Shift+Z — undo / redo · Esc — deselect
+        </p>
+      </div>
     </div>
   );
 }
@@ -463,17 +563,16 @@ function VideoFields({
       <div className="field-row">
         <label className="field">
           <span>Width</span>
-          <input type="number" value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
+          <NumInput value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
         </label>
         <label className="field">
           <span>Height</span>
-          <input type="number" value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
+          <NumInput value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
         </label>
       </div>
       <label className="field">
         <span>Trim in (s into source clip)</span>
-        <input
-          type="number"
+        <NumInput
           step={0.1}
           min={0}
           max={p.naturalDuration || undefined}
@@ -498,11 +597,11 @@ function PolygonFields({ props: p, onChange }: { props: PolygonLayerProps; onCha
       <div className="field-row">
         <label className="field">
           <span>Width</span>
-          <input type="number" value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
+          <NumInput value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
         </label>
         <label className="field">
           <span>Height</span>
-          <input type="number" value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
+          <NumInput value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
         </label>
       </div>
       <div className="field-row">
@@ -512,8 +611,7 @@ function PolygonFields({ props: p, onChange }: { props: PolygonLayerProps; onCha
         </label>
         <label className="field">
           <span>Sides</span>
-          <input
-            type="number"
+          <NumInput
             min={3}
             max={12}
             value={p.sides}
@@ -531,11 +629,11 @@ function StarFields({ props: p, onChange }: { props: StarLayerProps; onChange: (
       <div className="field-row">
         <label className="field">
           <span>Width</span>
-          <input type="number" value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
+          <NumInput value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
         </label>
         <label className="field">
           <span>Height</span>
-          <input type="number" value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
+          <NumInput value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
         </label>
       </div>
       <div className="field-row">
@@ -545,8 +643,7 @@ function StarFields({ props: p, onChange }: { props: StarLayerProps; onChange: (
         </label>
         <label className="field">
           <span>Points</span>
-          <input
-            type="number"
+          <NumInput
             min={3}
             max={12}
             value={p.points}
@@ -556,8 +653,7 @@ function StarFields({ props: p, onChange }: { props: StarLayerProps; onChange: (
       </div>
       <label className="field">
         <span>Inner radius %</span>
-        <input
-          type="number"
+        <NumInput
           min={5}
           max={95}
           value={Math.round(p.innerRatio * 100)}
@@ -612,8 +708,7 @@ function AudioFields({
       )}
       <label className="field">
         <span>Trim in (s into source clip)</span>
-        <input
-          type="number"
+        <NumInput
           step={0.1}
           min={0}
           max={p.naturalDuration || undefined}
@@ -671,12 +766,20 @@ function CaptionFields({
       const sourceProps = sourceLayer.props as VideoLayerProps | AudioLayerProps;
       const { transcribeMediaSource } = await import("../engine/transcribe");
       const words = await transcribeMediaSource(sourceProps.src, { modelSize, onProgress: setProgress });
+      if (words.length === 0) {
+        setError("No speech was detected in this clip.");
+        return;
+      }
+      // Captions + timing land as one undo step.
+      const store = useEditorStore.getState();
+      store.beginGesture();
       onChange({
         words: words.map((w) => ({ id: makeId("word"), text: w.text, start: w.start, end: w.end, emphasis: false })),
         sourceTrimIn: sourceProps.trimIn,
         sourceLayerName: sourceLayer.name,
       });
       updateLayerTiming(layerId, sourceLayer.startTime, sourceLayer.endTime);
+      store.endGesture();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -740,11 +843,11 @@ function CaptionFields({
               <option value="buildUp">Build-up (words accumulate as spoken)</option>
             </select>
           </label>
+          <FontSelect value={p.fontFamily} onChange={(fontFamily) => onChange({ fontFamily })} />
           <div className="field-row">
             <label className="field">
               <span>Size</span>
-              <input
-                type="number"
+              <NumInput
                 value={p.fontSize}
                 onChange={(e) => onChange({ fontSize: parseFloat(e.target.value) || 1 })}
               />
@@ -803,21 +906,21 @@ function GlassFields({ props: p, onChange }: { props: GlassLayerProps; onChange:
       <div className="field-row">
         <label className="field">
           <span>Width</span>
-          <input type="number" value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
+          <NumInput value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
         </label>
         <label className="field">
           <span>Height</span>
-          <input type="number" value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
+          <NumInput value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
         </label>
       </div>
       <div className="field-row">
         <label className="field">
           <span>Corner radius</span>
-          <input type="number" value={p.radius} onChange={(e) => onChange({ radius: parseFloat(e.target.value) || 0 })} />
+          <NumInput value={p.radius} onChange={(e) => onChange({ radius: parseFloat(e.target.value) || 0 })} />
         </label>
         <label className="field">
           <span>Blur</span>
-          <input type="number" value={p.blur} onChange={(e) => onChange({ blur: parseFloat(e.target.value) || 0 })} />
+          <NumInput value={p.blur} onChange={(e) => onChange({ blur: parseFloat(e.target.value) || 0 })} />
         </label>
       </div>
       <p className="hint">Blurs whatever is already drawn behind it (video, shapes…) — a real frosted-glass look.</p>
@@ -852,11 +955,11 @@ function OverlayFields({ props: p, onChange }: { props: OverlayLayerProps; onCha
       <div className="field-row">
         <label className="field">
           <span>Width</span>
-          <input type="number" value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
+          <NumInput value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
         </label>
         <label className="field">
           <span>Height</span>
-          <input type="number" value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
+          <NumInput value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
         </label>
       </div>
       <p className="hint">Full-bleed texture drawn over whatever's behind it — usually left at the frame's full size.</p>
@@ -864,16 +967,42 @@ function OverlayFields({ props: p, onChange }: { props: OverlayLayerProps; onCha
   );
 }
 
-function ImageFields({ props: p, onChange }: { props: ImageLayerProps; onChange: (p: Partial<ImageLayerProps>) => void }) {
-  const handleFile = (file: File) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const src = reader.result as string;
-      const img = new Image();
-      img.onload = () => onChange({ src, width: img.width, height: img.height });
-      img.src = src;
+function useResolvedMediaUrl(src: string): string | null {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    setUrl(null);
+    if (src) resolveMediaUrl(src).then((u) => alive && setUrl(u));
+    return () => {
+      alive = false;
     };
-    reader.readAsDataURL(file);
+  }, [src]);
+  return url;
+}
+
+function ImageFields({ props: p, onChange }: { props: ImageLayerProps; onChange: (p: Partial<ImageLayerProps>) => void }) {
+  const previewUrl = useResolvedMediaUrl(p.src);
+  const handleFile = async (file: File) => {
+    const dims = await new Promise<{ width: number; height: number } | null>((resolve) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(null);
+      };
+      img.src = url;
+    });
+    if (!dims) {
+      alert("This image format can't be opened. Try PNG, JPG or WebP.");
+      return;
+    }
+    // Stored in IndexedDB rather than inlined as a data URL, which used to overflow the autosave.
+    const { src } = await storeMediaFile(file);
+    onChange({ src, width: dims.width, height: dims.height });
   };
   return (
     <>
@@ -881,15 +1010,15 @@ function ImageFields({ props: p, onChange }: { props: ImageLayerProps; onChange:
         <span>Image file</span>
         <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
       </label>
-      {p.src && <img src={p.src} alt="" className="image-preview" />}
+      {previewUrl && <img src={previewUrl} alt="" className="image-preview" />}
       <div className="field-row">
         <label className="field">
           <span>Width</span>
-          <input type="number" value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
+          <NumInput value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
         </label>
         <label className="field">
           <span>Height</span>
-          <input type="number" value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
+          <NumInput value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
         </label>
       </div>
     </>

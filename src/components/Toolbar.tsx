@@ -1,9 +1,9 @@
 import { useRef, useState } from "react";
 import { useEditorStore } from "../state/store";
-import type { Project } from "../types";
 import { downloadBlob } from "../utils/download";
-import { exportCompositionToVideo } from "../engine/export";
+import { canExportVideo, exportCompositionToVideo, ExportCancelledError, extensionForBlob } from "../engine/export";
 import { AutoEditDialog } from "./AutoEditDialog";
+import { InvalidProjectError } from "../engine/migrate";
 import { LibraryPanel } from "./LibraryPanel";
 
 function formatTime(t: number): string {
@@ -46,25 +46,38 @@ export function Toolbar() {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const parsed = JSON.parse(reader.result as string) as Project;
-        loadProject(parsed);
-      } catch {
-        alert("Could not read this project file.");
+        loadProject(JSON.parse(reader.result as string));
+      } catch (err) {
+        alert(err instanceof InvalidProjectError ? err.message : "Could not read this project file — it isn't valid JSON.");
       }
     };
     reader.readAsText(file);
     e.target.value = "";
   };
 
+  const exportAbortRef = useRef<AbortController | null>(null);
+
   const handleExport = async () => {
+    if (!canExportVideo()) {
+      alert("This browser can't export video. Please open the editor in a recent Chrome or Edge.");
+      return;
+    }
+    const controller = new AbortController();
+    exportAbortRef.current = controller;
     setExporting(true, 0);
     try {
-      const blob = await exportCompositionToVideo(project.composition, (progress) => setExporting(true, progress));
-      downloadBlob(blob, `${project.name || "export"}.webm`);
+      const blob = await exportCompositionToVideo(
+        project.composition,
+        (progress) => setExporting(true, progress),
+        controller.signal
+      );
+      downloadBlob(blob, `${project.name || "export"}.${extensionForBlob(blob)}`);
     } catch (err) {
+      if (err instanceof ExportCancelledError) return;
       console.error(err);
       alert("Export failed: " + (err instanceof Error ? err.message : String(err)));
     } finally {
+      exportAbortRef.current = null;
       setExporting(false, 0);
     }
   };
@@ -130,9 +143,18 @@ export function Toolbar() {
         <button onClick={() => setAutoEditOpen(true)} title="Automatically assemble a first edit from speech">
           ✨ Auto Edit
         </button>
-        <button className="primary" onClick={handleExport} disabled={isExporting}>
-          {isExporting ? `Exporting ${Math.round(exportProgress * 100)}%…` : "⬇ Export video"}
-        </button>
+        {isExporting ? (
+          <>
+            <span className="export-status" title="Keep this tab in front until the export finishes">
+              Exporting {Math.round(exportProgress * 100)}% — keep this tab open
+            </span>
+            <button onClick={() => exportAbortRef.current?.abort()}>Cancel</button>
+          </>
+        ) : (
+          <button className="primary" onClick={handleExport}>
+            ⬇ Export video
+          </button>
+        )}
       </div>
 
       {autoEditOpen && <AutoEditDialog onClose={() => setAutoEditOpen(false)} />}

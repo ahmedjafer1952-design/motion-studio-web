@@ -19,8 +19,10 @@ import { buildAutoEdit, type AutoEditOptions } from "../engine/autoEdit";
 import type { TranscribedWord } from "../engine/transcribe";
 import { buildSticker, type StickerId } from "../engine/stickers";
 import { makeId } from "../utils/id";
+import { normalizeProject } from "../engine/migrate";
 
 const MAX_HISTORY = 100;
+const COALESCE_MS = 800;
 
 interface EditorState {
   project: Project;
@@ -31,9 +33,15 @@ interface EditorState {
   isPlaying: boolean;
   isExporting: boolean;
   exportProgress: number;
+  /** Project snapshot taken when a continuous gesture (e.g. a drag) began; edits during it share one undo step. */
+  gestureBase: Project | null;
+
+  beginGesture: () => void;
+  endGesture: () => void;
 
   newProject: () => void;
-  loadProject: (project: Project) => void;
+  /** Validates/migrates the data first; throws InvalidProjectError on something that isn't a project. */
+  loadProject: (project: unknown) => void;
 
   undo: () => void;
   redo: () => void;
@@ -43,6 +51,9 @@ interface EditorState {
   addLayer: (type: LayerType) => void;
   addLayerWithProps: (type: LayerType, propsPatch: Record<string, unknown>, durationOverride?: number) => void;
   removeLayer: (layerId: string) => void;
+  duplicateLayer: (layerId: string) => void;
+  /** Moves a layer (its whole position path, keyframes included) by dx/dy from where it was when the gesture began. */
+  translateLayer: (layerId: string, dx: number, dy: number) => void;
   selectLayer: (layerId: string | null) => void;
   renameLayer: (layerId: string, name: string) => void;
   updateLayerProps: (layerId: string, patch: Record<string, unknown>) => void;
@@ -70,6 +81,8 @@ interface EditorState {
     patch: Partial<Keyframe<unknown>>
   ) => void;
   setStaticValue: (layerId: string, propKey: AnimatablePropKey, value: unknown) => void;
+  /** Removes all keyframes from a property, keeping its current value as the static one (one undo step). */
+  clearKeyframes: (layerId: string, propKey: AnimatablePropKey) => void;
 
   setExporting: (isExporting: boolean, progress?: number) => void;
 }
@@ -116,10 +129,24 @@ function mapLayers(comp: Composition, layerId: string, fn: (l: Layer) => Layer):
 
 export const useEditorStore = create<EditorState>((set, get) => {
   /** Applies a pure transform to the current project, pushing the previous project onto the undo stack. */
-  function commit(updater: (project: Project) => Project, extraPatch?: Partial<EditorState>) {
+  let lastCoalesce: { key: string; at: number } | null = null;
+
+  /**
+   * Applies a pure transform to the current project, pushing the previous project onto the undo stack.
+   * Edits sharing a `coalesceKey` within a short window (typing in a field, dragging a color picker)
+   * collapse into one undo step instead of flooding the history.
+   */
+  function commit(updater: (project: Project) => Project, extraPatch?: Partial<EditorState>, coalesceKey?: string) {
     const prevProject = get().project;
     const nextProject = updater(prevProject);
     if (nextProject === prevProject && !extraPatch) return;
+    const now = Date.now();
+    const merge = !!coalesceKey && lastCoalesce?.key === coalesceKey && now - lastCoalesce.at < COALESCE_MS;
+    lastCoalesce = coalesceKey ? { key: coalesceKey, at: now } : null;
+    if (get().gestureBase || merge) {
+      set({ project: nextProject, future: [], ...extraPatch });
+      return;
+    }
     set((s) => ({
       project: nextProject,
       past: [...s.past, prevProject].slice(-MAX_HISTORY),
@@ -137,6 +164,19 @@ export const useEditorStore = create<EditorState>((set, get) => {
     isPlaying: false,
     isExporting: false,
     exportProgress: 0,
+    gestureBase: null,
+
+    beginGesture: () => set((s) => ({ gestureBase: s.project })),
+
+    endGesture: () => {
+      const { gestureBase, project } = get();
+      if (!gestureBase) return;
+      if (gestureBase === project) {
+        set({ gestureBase: null });
+        return;
+      }
+      set((s) => ({ gestureBase: null, past: [...s.past, gestureBase].slice(-MAX_HISTORY), future: [] }));
+    },
 
     newProject: () =>
       set({
@@ -146,12 +186,22 @@ export const useEditorStore = create<EditorState>((set, get) => {
         selectedLayerId: null,
         playhead: 0,
         isPlaying: false,
+        gestureBase: null,
       }),
 
-    loadProject: (project) =>
-      set({ project, past: [], future: [], selectedLayerId: null, playhead: 0, isPlaying: false }),
+    loadProject: (raw) =>
+      set({
+        project: normalizeProject(raw),
+        past: [],
+        future: [],
+        selectedLayerId: null,
+        playhead: 0,
+        isPlaying: false,
+        gestureBase: null,
+      }),
 
     undo: () => {
+      get().endGesture();
       const { past, future, project } = get();
       if (past.length === 0) return;
       const prev = past[past.length - 1];
@@ -165,8 +215,10 @@ export const useEditorStore = create<EditorState>((set, get) => {
       set({ project: next, past: [...past, project], future: future.slice(1) });
     },
 
-    updateComposition: (patch) =>
-      commit((p) => ({ ...p, composition: { ...p.composition, ...patch } })),
+    updateComposition: (patch) => {
+      commit((p) => ({ ...p, composition: { ...p.composition, ...patch } }), undefined, `comp:${Object.keys(patch).join(",")}`);
+      set((s) => ({ playhead: Math.min(s.playhead, s.project.composition.duration) }));
+    },
 
     addLayer: (type) => {
       const layer = createLayer(type, get().project.composition);
@@ -200,25 +252,88 @@ export const useEditorStore = create<EditorState>((set, get) => {
       );
     },
 
-    selectLayer: (layerId) => set({ selectedLayerId: layerId }),
+    duplicateLayer: (layerId) => {
+      const comp = get().project.composition;
+      const idx = comp.layers.findIndex((l) => l.id === layerId);
+      if (idx === -1) return;
+      const copy = cloneLayer(comp.layers[idx]);
+      copy.id = makeId("layer");
+      copy.name = `${comp.layers[idx].name} copy`;
+      const offset = 24;
+      copy.transform.position.static = { x: copy.transform.position.static.x + offset, y: copy.transform.position.static.y + offset };
+      copy.transform.position.keyframes = copy.transform.position.keyframes.map((k) => ({
+        ...k,
+        id: makeId("kf"),
+        value: { x: k.value.x + offset, y: k.value.y + offset },
+      }));
+      for (const key of ["scale", "rotation", "opacity"] as const) {
+        const prop = copy.transform[key] as { keyframes: Keyframe<unknown>[] };
+        prop.keyframes = prop.keyframes.map((k) => ({ ...k, id: makeId("kf") }));
+      }
+      commit(
+        (p) => {
+          const layers = [...p.composition.layers];
+          layers.splice(idx, 0, copy);
+          return { ...p, composition: { ...p.composition, layers } };
+        },
+        { selectedLayerId: copy.id }
+      );
+    },
 
-    renameLayer: (layerId, name) =>
-      commit((p) => ({ ...p, composition: mapLayers(p.composition, layerId, (l) => ({ ...l, name })) })),
-
-    updateLayerProps: (layerId, patch) =>
+    translateLayer: (layerId, dx, dy) => {
+      const source = (get().gestureBase ?? get().project).composition.layers.find((l) => l.id === layerId);
+      if (!source) return;
+      const shift = (pt: Point): Point => ({ x: pt.x + dx, y: pt.y + dy });
       commit((p) => ({
         ...p,
         composition: mapLayers(p.composition, layerId, (l) => ({
           ...l,
-          props: { ...l.props, ...patch } as Layer["props"],
+          transform: {
+            ...l.transform,
+            position: {
+              static: shift(source.transform.position.static),
+              keyframes: source.transform.position.keyframes.map((k) => ({ ...k, value: shift(k.value) })),
+            },
+          },
         })),
-      })),
+      }));
+    },
 
-    updateLayerTiming: (layerId, startTime, endTime) =>
-      commit((p) => {
-        const comp = mapLayers(p.composition, layerId, (l) => ({ ...l, startTime, endTime }));
-        return { ...p, composition: { ...comp, duration: Math.max(comp.duration, endTime) } };
-      }),
+    selectLayer: (layerId) => set({ selectedLayerId: layerId }),
+
+    renameLayer: (layerId, name) =>
+      commit(
+        (p) => ({ ...p, composition: mapLayers(p.composition, layerId, (l) => ({ ...l, name })) }),
+        undefined,
+        `name:${layerId}`
+      ),
+
+    updateLayerProps: (layerId, patch) =>
+      commit(
+        (p) => ({
+          ...p,
+          composition: mapLayers(p.composition, layerId, (l) => ({
+            ...l,
+            props: { ...l.props, ...patch } as Layer["props"],
+          })),
+        }),
+        undefined,
+        `props:${layerId}:${Object.keys(patch).sort().join(",")}`
+      ),
+
+    updateLayerTiming: (layerId, startTime, endTime) => {
+      if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) return;
+      const start = Math.max(0, startTime);
+      const end = Math.max(start + 0.05, endTime);
+      commit(
+        (p) => {
+          const comp = mapLayers(p.composition, layerId, (l) => ({ ...l, startTime: start, endTime: end }));
+          return { ...p, composition: { ...comp, duration: Math.max(comp.duration, end) } };
+        },
+        undefined,
+        `timing:${layerId}`
+      );
+    },
 
     moveLayer: (layerId, direction) =>
       commit((p) => {
@@ -327,9 +442,14 @@ export const useEditorStore = create<EditorState>((set, get) => {
     setPlayhead: (time) =>
       set((s) => ({ playhead: Math.max(0, Math.min(s.project.composition.duration, time)) })),
 
-    play: () => set({ isPlaying: true }),
+    play: () =>
+      set((s) => {
+        const comp = s.project.composition;
+        const atEnd = s.playhead >= comp.duration - 1 / comp.fps;
+        return { isPlaying: true, playhead: atEnd ? 0 : s.playhead };
+      }),
     pause: () => set({ isPlaying: false }),
-    togglePlay: () => set((s) => ({ isPlaying: !s.isPlaying })),
+    togglePlay: () => (get().isPlaying ? get().pause() : get().play()),
 
     addKeyframe: (layerId, propKey, value) =>
       commit((p) => {
@@ -399,9 +519,24 @@ export const useEditorStore = create<EditorState>((set, get) => {
             if (existingIdx >= 0) {
               animProp.keyframes[existingIdx].value = value;
             } else {
-              animProp.static = value;
+              // Animated property edited between keyframes: record the change as a new keyframe here,
+              // otherwise the edit would silently have no effect.
+              animProp.keyframes.push({ id: makeId("kf"), time, value, easing: "easeInOut" });
+              animProp.keyframes.sort((a, b) => a.time - b.time);
             }
           }
+          return layer;
+        }),
+      }), undefined, `static:${layerId}:${propKey}:${get().playhead.toFixed(3)}`),
+
+    clearKeyframes: (layerId, propKey) =>
+      commit((p) => ({
+        ...p,
+        composition: mapLayers(p.composition, layerId, (l) => {
+          const layer = cloneLayer(l);
+          const animProp = layer.transform[propKey] as { static: unknown; keyframes: Keyframe<unknown>[] };
+          animProp.static = evaluateTransform(l.transform, get().playhead)[propKey];
+          animProp.keyframes = [];
           return layer;
         }),
       })),

@@ -24,7 +24,7 @@ export function defaultTransform(width: number, height: number, compW: number, c
   };
 }
 
-function defaultProps(type: LayerType): Layer["props"] {
+export function defaultProps(type: LayerType): Layer["props"] {
   switch (type) {
     case "text":
       return {

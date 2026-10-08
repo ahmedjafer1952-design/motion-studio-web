@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEditorStore } from "../state/store";
 import type { AudioLayerProps, Layer, VideoLayerProps } from "../types";
 import type { ModelSize, TranscribeProgress } from "../engine/transcribe";
@@ -30,6 +30,14 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
   const [ctaText, setCtaText] = useState("تابعنا");
   const [progress, setProgress] = useState<TranscribeProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Transcription can't be interrupted mid-inference, so closing the dialog discards its result instead.
+  const discardedRef = useRef(false);
+  useEffect(
+    () => () => {
+      discardedRef.current = true;
+    },
+    []
+  );
 
   const handleRun = async () => {
     const source = sourceCandidates.find((l) => l.id === sourceId);
@@ -40,6 +48,11 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
       const { transcribeMediaSource } = await import("../engine/transcribe");
       const srcProps = source.props as VideoLayerProps | AudioLayerProps;
       const words = await transcribeMediaSource(srcProps.src, { modelSize, onProgress: setProgress });
+      if (discardedRef.current) return;
+      if (words.length === 0) {
+        setError("No speech was detected in this clip, so there's nothing to build an edit from.");
+        return;
+      }
       applyAutoEdit(source.id, words, {
         pace,
         title: includeTitle ? titleText.trim() || undefined : undefined,
@@ -47,14 +60,14 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
       });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (!discardedRef.current) setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setProgress(null);
+      if (!discardedRef.current) setProgress(null);
     }
   };
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={() => !progress && onClose()}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h3>✨ Auto Edit</h3>
         <p className="hint">

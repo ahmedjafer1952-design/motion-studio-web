@@ -7,6 +7,7 @@ export function LayerRow({ layer }: { layer: Layer }) {
   const selectLayer = useEditorStore((s) => s.selectLayer);
   const removeLayer = useEditorStore((s) => s.removeLayer);
   const moveLayer = useEditorStore((s) => s.moveLayer);
+  const duplicateLayer = useEditorStore((s) => s.duplicateLayer);
   const isSelected = selectedLayerId === layer.id;
 
   return (
@@ -21,7 +22,10 @@ export function LayerRow({ layer }: { layer: Layer }) {
           <button title="Move down" onClick={() => moveLayer(layer.id, "down")}>
             ↓
           </button>
-          <button title="Delete layer" className="danger" onClick={() => removeLayer(layer.id)}>
+          <button title="Duplicate (Ctrl+D)" onClick={() => duplicateLayer(layer.id)}>
+            ⧉
+          </button>
+          <button title="Delete layer (Delete)" className="danger" onClick={() => removeLayer(layer.id)}>
             ✕
           </button>
         </div>

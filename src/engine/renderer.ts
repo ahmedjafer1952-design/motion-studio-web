@@ -31,14 +31,16 @@ export interface RenderOptions {
  */
 export class MediaSession {
   images = new Map<string, HTMLImageElement>();
+  /** Keyed per layer ("layerId|src"), so two layers using the same file never fight over one element. */
   videos = new Map<string, HTMLVideoElement>();
   audios = new Map<string, HTMLAudioElement>();
   /** Last successfully decoded frame per video, drawn while a seek is in flight so the canvas never flashes black. */
   frameCache = new Map<HTMLVideoElement, { canvas: HTMLCanvasElement; time: number }>();
-  /** Called when a video has a new frame available outside the playback loop (after load or a seek). */
+  /** Called when media has a new frame available outside the playback loop (after load or a seek). */
   onFrameReady: (() => void) | null = null;
+  private touched = new Set<string>();
 
-  private attachSource(el: HTMLMediaElement, src: string) {
+  private attachSource(el: HTMLMediaElement | HTMLImageElement, src: string) {
     resolveMediaUrl(src).then((url) => {
       if (url) el.src = url;
       else el.dispatchEvent(new Event("error"));
@@ -46,16 +48,21 @@ export class MediaSession {
   }
 
   getImage(src: string): HTMLImageElement | null {
-    const cached = this.images.get(src);
-    if (cached) return cached.complete ? cached : null;
-    const img = new Image();
-    img.src = src;
-    this.images.set(src, img);
-    return null;
+    let img = this.images.get(src);
+    if (!img) {
+      const el = new Image();
+      el.addEventListener("load", () => this.onFrameReady?.());
+      this.attachSource(el, src);
+      this.images.set(src, el);
+      img = el;
+    }
+    return img.complete && img.naturalWidth > 0 ? img : null;
   }
 
-  getVideo(src: string): HTMLVideoElement {
-    let video = this.videos.get(src);
+  getVideo(src: string, layerId: string): HTMLVideoElement {
+    const key = `${layerId}|${src}`;
+    this.touched.add(key);
+    let video = this.videos.get(key);
     if (!video) {
       const el = document.createElement("video");
       el.playsInline = true;
@@ -64,19 +71,21 @@ export class MediaSession {
       el.addEventListener("loadeddata", notify);
       el.addEventListener("seeked", notify);
       this.attachSource(el, src);
-      this.videos.set(src, el);
+      this.videos.set(key, el);
       video = el;
     }
     return video;
   }
 
-  getAudio(src: string): HTMLAudioElement {
-    let audio = this.audios.get(src);
+  getAudio(src: string, layerId: string): HTMLAudioElement {
+    const key = `${layerId}|${src}`;
+    this.touched.add(key);
+    let audio = this.audios.get(key);
     if (!audio) {
       audio = document.createElement("audio");
       audio.preload = "auto";
       this.attachSource(audio, src);
-      this.audios.set(src, audio);
+      this.audios.set(key, audio);
     }
     return audio;
   }
@@ -99,79 +108,85 @@ export class MediaSession {
     if (cache && cache.time >= 0) ctx.drawImage(cache.canvas, x, y, w, h);
   }
 
-  preloadImages(comp: Composition): Promise<void[]> {
-    const sources = comp.layers
-      .filter((l): l is Layer & { props: ImageLayerProps } => l.type === "image")
-      .map((l) => (l.props as ImageLayerProps).src)
-      .filter(Boolean);
-    return Promise.all(
-      sources.map(
-        (src) =>
-          new Promise<void>((resolve) => {
-            const cached = this.images.get(src);
-            if (cached && cached.complete) {
-              resolve();
-              return;
-            }
-            const img = cached ?? new Image();
-            img.onload = () => resolve();
-            img.onerror = () => resolve();
-            if (!cached) {
-              img.src = src;
-              this.images.set(src, img);
-            }
-          })
-      )
-    );
+  beginFrame() {
+    this.touched.clear();
   }
 
-  preloadVideos(comp: Composition): Promise<void[]> {
-    const sources = comp.layers
-      .filter((l): l is Layer & { props: VideoLayerProps } => l.type === "video")
-      .map((l) => (l.props as VideoLayerProps).src)
-      .filter(Boolean);
-    return Promise.all(sources.map((src) => waitForMediaReady(this.getVideo(src))));
-  }
-
-  preloadAudios(comp: Composition): Promise<void[]> {
-    const sources = comp.layers
-      .filter((l): l is Layer & { props: AudioLayerProps } => l.type === "audio")
-      .map((l) => (l.props as AudioLayerProps).src)
-      .filter(Boolean);
-    return Promise.all(sources.map((src) => waitForMediaReady(this.getAudio(src))));
-  }
-
-  /** Pauses and rewinds every video/audio layer's element to its trim-in point. */
-  resetMediaLayers(comp: Composition) {
-    for (const layer of comp.layers) {
-      if (layer.type === "video") {
-        const p = layer.props as VideoLayerProps;
-        if (!p.src) continue;
-        seekAndPause(this.getVideo(p.src), p.trimIn);
-      } else if (layer.type === "audio") {
-        const p = layer.props as AudioLayerProps;
-        if (!p.src) continue;
-        seekAndPause(this.getAudio(p.src), p.trimIn);
+  /**
+   * Silences media no layer used this frame — a deleted layer, an undone one, or a replaced file —
+   * and frees elements whose layer is gone, so audio never keeps playing on its own.
+   */
+  endFrame(comp: Composition) {
+    const liveIds = new Set(comp.layers.map((l) => l.id));
+    for (const map of [this.videos, this.audios] as Map<string, HTMLMediaElement>[]) {
+      for (const [key, el] of map) {
+        if (this.touched.has(key)) continue;
+        if (!el.paused) el.pause();
+        if (!liveIds.has(key.split("|")[0])) {
+          releaseElement(el);
+          this.frameCache.delete(el as HTMLVideoElement);
+          map.delete(key);
+        }
       }
     }
   }
 
+  private mediaLayers(comp: Composition, type: "video" | "audio") {
+    return comp.layers.filter((l) => l.type === type && (l.props as VideoLayerProps | AudioLayerProps).src);
+  }
+
+  preloadImages(comp: Composition): Promise<void[]> {
+    const sources = comp.layers
+      .filter((l) => l.type === "image")
+      .map((l) => (l.props as ImageLayerProps).src)
+      .filter(Boolean);
+    return Promise.all(
+      sources.map((src) => {
+        this.getImage(src);
+        const img = this.images.get(src)!;
+        if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+        return waitForEvent(img, ["load", "error"]);
+      })
+    );
+  }
+
+  preloadVideos(comp: Composition): Promise<void[]> {
+    return Promise.all(
+      this.mediaLayers(comp, "video").map((l) => waitForMediaReady(this.getVideo((l.props as VideoLayerProps).src, l.id)))
+    );
+  }
+
+  preloadAudios(comp: Composition): Promise<void[]> {
+    return Promise.all(
+      this.mediaLayers(comp, "audio").map((l) => waitForMediaReady(this.getAudio((l.props as AudioLayerProps).src, l.id)))
+    );
+  }
+
+  /** Pauses and rewinds every video/audio layer's element to its trim-in point. */
+  resetMediaLayers(comp: Composition) {
+    for (const l of this.mediaLayers(comp, "video")) {
+      const p = l.props as VideoLayerProps;
+      seekAndPause(this.getVideo(p.src, l.id), p.trimIn);
+    }
+    for (const l of this.mediaLayers(comp, "audio")) {
+      const p = l.props as AudioLayerProps;
+      seekAndPause(this.getAudio(p.src, l.id), p.trimIn);
+    }
+  }
+
   dispose() {
-    for (const video of this.videos.values()) {
-      video.pause();
-      video.removeAttribute("src");
-      video.load();
-    }
-    for (const audio of this.audios.values()) {
-      audio.pause();
-      audio.removeAttribute("src");
-      audio.load();
-    }
+    for (const el of [...this.videos.values(), ...this.audios.values()]) releaseElement(el);
     this.images.clear();
     this.frameCache.clear();
     this.videos.clear();
     this.audios.clear();
   }
+}
+
+function releaseElement(el: HTMLMediaElement) {
+  el.pause();
+  el.removeAttribute("src");
+  el.load();
 }
 
 function seekAndPause(el: HTMLMediaElement, time: number) {
@@ -183,17 +198,23 @@ function seekAndPause(el: HTMLMediaElement, time: number) {
   }
 }
 
-function waitForMediaReady(el: HTMLMediaElement): Promise<void> {
-  if (el.readyState >= 2) return Promise.resolve();
+const MEDIA_LOAD_TIMEOUT_MS = 20000;
+
+function waitForEvent(el: EventTarget, events: string[], timeoutMs = MEDIA_LOAD_TIMEOUT_MS): Promise<void> {
   return new Promise<void>((resolve) => {
-    const onReady = () => {
-      el.removeEventListener("loadeddata", onReady);
-      el.removeEventListener("error", onReady);
+    const done = () => {
+      clearTimeout(timer);
+      for (const ev of events) el.removeEventListener(ev, done);
       resolve();
     };
-    el.addEventListener("loadeddata", onReady);
-    el.addEventListener("error", onReady);
+    const timer = setTimeout(done, timeoutMs);
+    for (const ev of events) el.addEventListener(ev, done);
   });
+}
+
+function waitForMediaReady(el: HTMLMediaElement): Promise<void> {
+  if (el.readyState >= 2) return Promise.resolve();
+  return waitForEvent(el, ["loadeddata", "error"]);
 }
 
 export const defaultSession = new MediaSession();
@@ -207,7 +228,9 @@ function syncMediaElement(
   playing: boolean
 ): void {
   el.muted = muted;
-  if (!active) {
+  // Past the end of the clip: hold the last frame instead of play() restarting it from 0 every frame.
+  const clipEnded = Number.isFinite(el.duration) && desiredTime >= el.duration - 0.05;
+  if (!active || clipEnded) {
     if (!el.paused) el.pause();
     return;
   }
@@ -331,7 +354,7 @@ function drawEmphasisLine(ctx: CanvasRenderingContext2D, p: TextLayerProps, word
 }
 
 function drawText(ctx: CanvasRenderingContext2D, p: TextLayerProps, localTime: number) {
-  ctx.font = `${p.fontSize}px ${p.fontFamily}`;
+  ctx.font = `${p.bold ? "bold " : ""}${p.fontSize}px ${p.fontFamily}`;
   ctx.textBaseline = "middle";
 
   if (p.countTo != null) {
@@ -535,13 +558,13 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
   if (layer.type === "video") {
     const p = layer.props as VideoLayerProps;
     if (p.src) {
-      const video = opts.session.getVideo(p.src);
+      const video = opts.session.getVideo(p.src, layer.id);
       syncMediaElement(video, active, p.trimIn + (time - layer.startTime), p.muted, opts.playing);
     }
   } else if (layer.type === "audio") {
     const p = layer.props as AudioLayerProps;
     if (p.src) {
-      const audio = opts.session.getAudio(p.src);
+      const audio = opts.session.getAudio(p.src, layer.id);
       syncMediaElement(audio, active, p.trimIn + (time - layer.startTime), p.muted, opts.playing);
     }
     return; // audio layers have nothing to draw
@@ -611,7 +634,7 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
     case "video": {
       const p = layer.props as VideoLayerProps;
       if (!p.src) break;
-      const video = opts.session.getVideo(p.src);
+      const video = opts.session.getVideo(p.src, layer.id);
       opts.session.drawVideoFrame(ctx, video, -p.width / 2, -p.height / 2, p.width, p.height);
       break;
     }
@@ -632,6 +655,7 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
 
 export function renderComposition(ctx: CanvasRenderingContext2D, comp: Composition, time: number, opts: RenderOptions = { playing: false }) {
   const resolvedOpts: Required<RenderOptions> = { playing: opts.playing, session: opts.session ?? defaultSession };
+  resolvedOpts.session.beginFrame();
   ctx.save();
   ctx.clearRect(0, 0, comp.width, comp.height);
   ctx.fillStyle = comp.backgroundColor;
@@ -642,6 +666,7 @@ export function renderComposition(ctx: CanvasRenderingContext2D, comp: Compositi
     drawLayer(ctx, comp.layers[i], time, resolvedOpts);
   }
   ctx.restore();
+  resolvedOpts.session.endFrame(comp);
 
   applyColorGrade(ctx, comp);
 }

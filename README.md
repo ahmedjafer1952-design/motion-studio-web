@@ -6,7 +6,7 @@ automatically. Layers, a keyframeable timeline, a canvas-based compositor,
 speech-to-text, and video export, all running client-side: no backend, no
 account, no upload.
 
-## Features (v0.8)
+## Features (v0.9)
 
 - **Layers**: text (incl. a typewriter reveal, `[bracket]` word-highlighting,
   and a 0→N count-up mode), rectangle, ellipse, polygon (3–12 sides), star,
@@ -71,6 +71,14 @@ account, no upload.
   and a CTA at the end — all inserted as **one single undo step**. Detection
   is rule-based (ordinal markers, digits, pause gaps, content-word length),
   not full language understanding, so review and tweak the result afterward.
+- **Direct manipulation**: click a layer on the preview to select it, drag
+  to move it (its whole motion path moves with it; one drag = one undo
+  step). Shortcuts: Space play/pause, Delete remove, Ctrl+D duplicate,
+  arrows nudge (Shift = 10px), Ctrl+Z / Ctrl+Shift+Z undo/redo, Esc
+  deselect.
+- **Arabic fonts**: Cairo, Tajawal, IBM Plex Sans Arabic, Noto Kufi, Reem
+  Kufi, Changa, Lalezar and Amiri for text and captions (loaded from Google
+  Fonts; preview and export wait for them so nothing renders in a fallback).
 - **Timeline**: scrubbable playhead, per-layer keyframe tracks, ruler.
 - **Properties panel**: edit layer content and animate any transform property
   with a stopwatch toggle, like After Effects.
@@ -78,10 +86,20 @@ account, no upload.
   video/audio layer sound (each has its own mute toggle).
 - **Undo / redo**: full edit history (`Ctrl+Z` / `Ctrl+Shift+Z`, or the
   toolbar buttons).
-- **Export**: renders the composition — picture *and* sound — to a `.webm`
-  video file entirely in your browser, using `canvas.captureStream()` +
-  `MediaRecorder`, with video/audio layer audio mixed in via the Web Audio
-  API. No server required.
+- **Export**: renders the composition — picture *and* sound — entirely in
+  the browser (`canvas.captureStream()` + `MediaRecorder`, audio mixed via the
+  Web Audio API). Writes **MP4** where the browser supports it (current
+  Chrome/Edge), WebM otherwise; cancellable. Export runs in real time (a
+  60-second video takes about a minute) and the tab should stay in front.
+  Best in desktop Chrome/Edge; other browsers get a clear message instead
+  of a broken export.
+- **Robustness**: project files are validated and migrated on load (old or
+  hand-edited files can't crash the editor), an error screen replaces a
+  blank page if something does go wrong, autosave failures are shown, and
+  imported media/images live in IndexedDB rather than the autosave.
+- **Tests & CI**: Vitest suites for the engine and the store (`npm test`),
+  plus a GitHub Actions workflow running typecheck, tests and build.
+  `netlify.toml` is included for one-click static hosting.
 - **Save / Load**: projects are plain JSON files you can save and reopen, and
   the current project auto-saves to `localStorage`. Imported video/audio
   files are kept in the browser's IndexedDB and referenced by a stable

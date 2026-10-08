@@ -43,6 +43,7 @@ export interface TextLayerProps {
   color: string;
   fontFamily: string;
   align: "left" | "center" | "right";
+  bold?: boolean;
   emphasisColor?: string; // color for [bracketed] words in content
   revealSpeed?: number; // chars/sec — types content on progressively, like a typewriter
   countTo?: number; // when set, content is replaced by a 0 → countTo counter

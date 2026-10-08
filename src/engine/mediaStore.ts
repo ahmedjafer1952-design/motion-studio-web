@@ -19,12 +19,20 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
+interface StoredMedia {
+  blob: Blob;
+  createdAt: number;
+}
+
+/** Unreferenced media older than this is deleted at startup, so storage doesn't fill up forever. */
+const UNUSED_MEDIA_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
 function idbPut(id: string, blob: Blob): Promise<void> {
   return openDb().then(
     (db) =>
       new Promise<void>((resolve, reject) => {
         const tx = db.transaction(STORE, "readwrite");
-        tx.objectStore(STORE).put(blob, id);
+        tx.objectStore(STORE).put({ blob, createdAt: Date.now() } satisfies StoredMedia, id);
         tx.oncomplete = () => resolve();
         tx.onerror = () => reject(tx.error);
         tx.onabort = () => reject(tx.error);
@@ -37,7 +45,10 @@ function idbGet(id: string): Promise<Blob | null> {
     (db) =>
       new Promise<Blob | null>((resolve, reject) => {
         const req = db.transaction(STORE, "readonly").objectStore(STORE).get(id);
-        req.onsuccess = () => resolve((req.result as Blob | undefined) ?? null);
+        req.onsuccess = () => {
+          const value = req.result as StoredMedia | Blob | undefined;
+          resolve(value instanceof Blob ? value : value?.blob ?? null);
+        };
         req.onerror = () => reject(req.error);
       })
   );
@@ -74,4 +85,32 @@ export function resolveMediaUrl(src: string): Promise<string | null> {
     resolved.set(src, p);
   }
   return p;
+}
+
+/**
+ * Deletes stored media that `referencedText` (the serialized current project) no longer mentions
+ * and that was imported more than two weeks ago. Saved project files on disk may still reference
+ * recent media, which is why unreferenced files aren't removed immediately.
+ */
+export async function collectUnusedMedia(referencedText: string): Promise<number> {
+  const db = await openDb();
+  const cutoff = Date.now() - UNUSED_MEDIA_MAX_AGE_MS;
+  return new Promise<number>((resolve, reject) => {
+    let removed = 0;
+    const tx = db.transaction(STORE, "readwrite");
+    const req = tx.objectStore(STORE).openCursor();
+    req.onsuccess = () => {
+      const cursor = req.result;
+      if (!cursor) return;
+      const value = cursor.value as StoredMedia | Blob;
+      const createdAt = value instanceof Blob ? Date.now() : value.createdAt;
+      if (!referencedText.includes(`idb:${String(cursor.key)}`) && createdAt < cutoff) {
+        cursor.delete();
+        removed++;
+      }
+      cursor.continue();
+    };
+    tx.oncomplete = () => resolve(removed);
+    tx.onerror = () => reject(tx.error);
+  });
 }
