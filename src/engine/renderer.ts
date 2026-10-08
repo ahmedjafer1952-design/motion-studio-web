@@ -9,6 +9,7 @@ import type {
   OverlayLayerProps,
   ChartLayerProps,
   CutoutLayerProps,
+  ArrowLayerProps,
   Composition as Comp,
   PolygonLayerProps,
   ShapeLayerProps,
@@ -775,6 +776,64 @@ function drawCutout(ctx: CanvasRenderingContext2D, layer: Layer, time: number, o
   ctx.restore();
 }
 
+function drawArrow(ctx: CanvasRenderingContext2D, p: ArrowLayerProps, localTime: number) {
+  const k = Math.min(1, Math.max(0, localTime / Math.max(0.05, p.drawDuration)));
+  if (k <= 0) return;
+  const x0 = -p.width / 2;
+  const x1 = p.width / 2;
+  const cy = -p.curve * p.height;
+  const at = (t: number) => ({ x: (1 - t) * (1 - t) * x0 + t * t * x1, y: 2 * (1 - t) * t * cy });
+  ctx.strokeStyle = p.color;
+  ctx.fillStyle = p.color;
+  ctx.lineWidth = p.thickness;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  if (p.dashed) ctx.setLineDash([p.thickness * 2.5, p.thickness * 2.2]);
+  ctx.beginPath();
+  const steps = 48;
+  for (let i = 0; i <= steps * k; i++) {
+    const pt = at(i / steps);
+    if (i === 0) ctx.moveTo(pt.x, pt.y);
+    else ctx.lineTo(pt.x, pt.y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+  if (k >= 1) {
+    const tip = at(1);
+    const prev = at(0.96);
+    const ang = Math.atan2(tip.y - prev.y, tip.x - prev.x);
+    const size = p.thickness * 4.5;
+    ctx.beginPath();
+    ctx.moveTo(tip.x - size * Math.cos(ang - 0.5), tip.y - size * Math.sin(ang - 0.5));
+    ctx.lineTo(tip.x, tip.y);
+    ctx.lineTo(tip.x - size * Math.cos(ang + 0.5), tip.y - size * Math.sin(ang + 0.5));
+    ctx.stroke();
+  }
+}
+
+function drawSlotPlaceholder(ctx: CanvasRenderingContext2D, w: number, h: number, name: string) {
+  ctx.save();
+  ctx.fillStyle = "rgba(79,140,255,0.12)";
+  ctx.fillRect(-w / 2, -h / 2, w, h);
+  ctx.setLineDash([18, 12]);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = "rgba(140,180,255,0.9)";
+  ctx.strokeRect(-w / 2 + 6, -h / 2 + 6, w - 12, h - 12);
+  ctx.setLineDash([]);
+  const size = Math.max(16, Math.min(w, h) * 0.06);
+  ctx.font = `bold ${size}px 'Cairo', sans-serif`;
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.direction = "rtl";
+  const label = name.replace(/^B-roll \d+:\s*/, "");
+  ctx.fillText("📷 حط هنا صورة أو مقطع", 0, -size * 0.8);
+  ctx.font = `${size * 0.75}px 'Cairo', sans-serif`;
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.fillText(label.length > 40 ? label.slice(0, 40) + "…" : label, 0, size * 0.6);
+  ctx.restore();
+}
+
 function drawGlassPanel(ctx: CanvasRenderingContext2D, layer: Layer, time: number) {
   if (time < layer.startTime || time > layer.endTime) return;
   const t = evaluateTransform(layer.transform, time);
@@ -936,10 +995,23 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
     }
     case "image": {
       const p = layer.props as ImageLayerProps;
+      if (!p.src) {
+        // Empty B-roll slot: a dashed hint in the live preview only — exports skip it.
+        if (opts.session === defaultSession) drawSlotPlaceholder(ctx, p.width, p.height, layer.name);
+        break;
+      }
       const img = opts.session.getImage(p.src);
       if (img) {
-        if (p.fadeBottom && p.fadeBottom > 0) drawWithBottomFade(ctx, p.width, p.height, p.fadeBottom, (c, w, h) => c.drawImage(img, 0, 0, w, h));
-        else ctx.drawImage(img, -p.width / 2, -p.height / 2, p.width, p.height);
+        const paint = (c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) => {
+          if (p.fit === "cover" && img.naturalWidth && img.naturalHeight) {
+            const s = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+            const sw = w / s;
+            const sh = h / s;
+            c.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, x, y, w, h);
+          } else c.drawImage(img, x, y, w, h);
+        };
+        if (p.fadeBottom && p.fadeBottom > 0) drawWithBottomFade(ctx, p.width, p.height, p.fadeBottom, (c, w, h) => paint(c, 0, 0, w, h));
+        else paint(ctx, -p.width / 2, -p.height / 2, p.width, p.height);
       }
       break;
     }
@@ -963,6 +1035,10 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
     }
     case "overlay": {
       drawOverlayEffect(ctx, layer.props as OverlayLayerProps);
+      break;
+    }
+    case "arrow": {
+      drawArrow(ctx, layer.props as ArrowLayerProps, time - layer.startTime);
       break;
     }
     case "chart": {

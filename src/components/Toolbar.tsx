@@ -141,6 +141,7 @@ export function Toolbar() {
         <button onClick={() => addLayer("glass")}>◐ Glass</button>
         <button onClick={() => addLayer("overlay")}>▦ Overlay</button>
         <button onClick={() => addLayer("chart")}>📊 Chart</button>
+        <button onClick={() => addLayer("arrow")}>↷ Arrow</button>
       </div>
 
       <div className="toolbar-group">

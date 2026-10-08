@@ -24,6 +24,7 @@ export interface ClaudeEditOutput {
   lists: { items: { atWord: number; text: string }[] }[];
   keyPhrases: { atWord: number; text: string; look?: string }[];
   accentColor?: string;
+  broll?: { atWord: number; endWord: number; description: string }[];
   zooms: { atWord: number; strength: string }[];
   sounds: { atWord: number; sound: string }[];
   colorGrade: string;

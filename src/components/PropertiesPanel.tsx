@@ -12,6 +12,7 @@ import type {
   OverlayLayerProps,
   ChartLayerProps,
   CutoutLayerProps,
+  ArrowLayerProps,
   PolygonLayerProps,
   Point,
   ShapeLayerProps,
@@ -235,6 +236,9 @@ export function PropertiesPanel() {
         )}
         {layer.type === "glass" && (
           <GlassFields props={layer.props as GlassLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
+        )}
+        {layer.type === "arrow" && (
+          <ArrowFields props={layer.props as ArrowLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
         )}
         {layer.type === "cutout" && (
           <CutoutFields props={layer.props as CutoutLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
@@ -1053,6 +1057,41 @@ function GlassFields({ props: p, onChange }: { props: GlassLayerProps; onChange:
   );
 }
 
+function ArrowFields({ props: p, onChange }: { props: ArrowLayerProps; onChange: (p: Partial<ArrowLayerProps>) => void }) {
+  return (
+    <>
+      <div className="field-row">
+        <label className="field">
+          <span>Length</span>
+          <NumInput min={20} value={p.width} onChange={(e) => onChange({ width: Math.max(20, parseFloat(e.target.value) || 20) })} />
+        </label>
+        <label className="field">
+          <span>Bow (-1 to 1)</span>
+          <NumInput min={-1} max={1} step={0.1} value={p.curve} onChange={(e) => onChange({ curve: Math.max(-1, Math.min(1, parseFloat(e.target.value) || 0)) })} />
+        </label>
+        <label className="field">
+          <span>Thickness</span>
+          <NumInput min={1} value={p.thickness} onChange={(e) => onChange({ thickness: Math.max(1, parseFloat(e.target.value) || 1) })} />
+        </label>
+      </div>
+      <div className="field-row">
+        <label className="field">
+          <span>Color</span>
+          <input type="color" value={p.color} onChange={(e) => onChange({ color: e.target.value })} />
+        </label>
+        <label className="field field-checkbox">
+          <input type="checkbox" checked={p.dashed} onChange={(e) => onChange({ dashed: e.target.checked })} />
+          <span>Dashed</span>
+        </label>
+        <label className="field">
+          <span>Draw time (s)</span>
+          <NumInput min={0.05} step={0.1} value={p.drawDuration} onChange={(e) => onChange({ drawDuration: Math.max(0.05, parseFloat(e.target.value) || 0.6) })} />
+        </label>
+      </div>
+    </>
+  );
+}
+
 function CutoutFields({ props: p, onChange }: { props: CutoutLayerProps; onChange: (p: Partial<CutoutLayerProps>) => void }) {
   const layers = useEditorStore((s) => s.project.composition.layers);
   const videos = layers.filter((l) => l.type === "video");
@@ -1220,12 +1259,13 @@ function ImageFields({ props: p, onChange }: { props: ImageLayerProps; onChange:
     }
     // Stored in IndexedDB rather than inlined as a data URL, which used to overflow the autosave.
     const { src } = await storeMediaFile(file);
-    onChange({ src, width: dims.width, height: dims.height });
+    // Slots (cover-fit) keep their box; a plain image takes its natural size.
+    onChange(p.fit === "cover" ? { src } : { src, width: dims.width, height: dims.height });
   };
   return (
     <>
       <label className="field">
-        <span>Image file</span>
+        <span>{p.src ? "Image file" : "📷 اختار صورة لهذا المكان"}</span>
         <input type="file" accept="image/*" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
       </label>
       {previewUrl && <img src={previewUrl} alt="" className="image-preview" />}

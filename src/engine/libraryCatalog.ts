@@ -203,6 +203,7 @@ export const CAPTION_CARDS: CaptionCard[] = [
 ];
 
 export const ELEMENT_CARDS: ElementCard[] = [
+  { kind: "element", id: "arrow", layerType: "arrow", label: "سهم منقّط", description: "سهم مرسوم باليد ينرسم لحاله — يربط بين الكلام", swatch: ["#e5e5e5", "#1b1b1e"] },
   { kind: "element", id: "chart", layerType: "chart", label: "رسم بياني متحرك", description: "أعمدة، دائري، شريط تقدم أو خط — الأرقام تعد وهي تطلع", swatch: ["#4f8cff", "#1b1b1e"] },
   { kind: "element", id: "glass", layerType: "glass", label: "لوحة زجاجية", description: "تمويه زجاجي حقيقي فوق الفيديو", swatch: ["#e4e4e8", "#28282d"] },
   { kind: "element", id: "rect", layerType: "rect", label: "مستطيل", description: "شكل مستطيل بسيط قابل للتحريك", swatch: ["#4f8cff", "#1b1b1e"] },

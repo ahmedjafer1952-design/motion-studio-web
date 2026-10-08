@@ -37,7 +37,8 @@ export type LayerType =
   | "glass"
   | "overlay"
   | "chart"
-  | "cutout";
+  | "cutout"
+  | "arrow";
 
 export interface TextLayerProps {
   content: string; // wrap a word in [brackets] to render it in emphasisColor
@@ -86,6 +87,7 @@ export interface ImageLayerProps {
   width: number;
   height: number;
   fadeBottom?: number; // 0–1: fraction of the bottom edge that fades to transparent (split-screen B-roll)
+  fit?: "cover"; // crop to fill the box instead of stretching (B-roll slots)
 }
 
 export interface VideoLayerProps {
@@ -101,6 +103,17 @@ export interface VideoLayerProps {
 }
 
 export type VideoLook = "grayscale" | "dim" | "blur";
+
+/** A curved arrow that draws itself on, start (left) to tip (right) — rotate/flip with the transform. */
+export interface ArrowLayerProps {
+  width: number;
+  height: number; // how far the curve bows
+  color: string;
+  thickness: number;
+  curve: number; // -1..1, bow direction and amount
+  dashed: boolean;
+  drawDuration: number; // seconds to draw on
+}
 
 /** The person from another video layer, cut out of their background, drawn exactly over them. */
 export interface CutoutLayerProps {
@@ -192,7 +205,8 @@ export interface Layer {
     | GlassLayerProps
     | OverlayLayerProps
     | ChartLayerProps
-    | CutoutLayerProps;
+    | CutoutLayerProps
+    | ArrowLayerProps;
 }
 
 export type ColorGradeId =

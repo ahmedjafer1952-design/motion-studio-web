@@ -258,6 +258,8 @@ export interface EditPlan {
   accent?: string | null;
   /** Put titles, numbers and key phrases behind the speaker (needs a video source). */
   textBehind?: boolean;
+  /** Cutaway slots: the creator drops an image/clip into each placeholder. */
+  broll?: { start: number; end: number; description: string }[];
   backgroundLook?: VideoLook | null;
   zooms: { time: number; strength: "light" | "strong" }[];
   sounds: { sound: SoundId; time: number }[];
@@ -471,6 +473,20 @@ export function buildEditFromPlan(
     });
   scaleKfs.sort((a, b) => a.time - b.time);
   updatedSourceLayer.transform.scale = { static: baseScale, keyframes: scaleKfs };
+
+  // B-roll placeholders: top half in portrait (fading into the speaker below), full frame in landscape.
+  (plan.broll ?? []).forEach((b, idx) => {
+    const t = toCompTime(b.start);
+    if (!inClip(t, 0.5)) return;
+    const slot = createLayer("image", comp);
+    slot.name = `B-roll ${idx + 1}: ${b.description}`;
+    slot.startTime = t;
+    slot.endTime = Math.min(sourceLayer.endTime, toCompTime(b.end));
+    const h = vertical ? comp.height * 0.5 : comp.height;
+    slot.transform.position.static = { x: comp.width / 2, y: vertical ? h / 2 : comp.height / 2 };
+    slot.props = { src: "", width: comp.width, height: h, fit: "cover", fadeBottom: vertical ? 0.35 : undefined };
+    newLayers.push(applyPresetToLayer(applyPresetToLayer(slot, "fadeIn", comp), "fadeOut", comp));
+  });
 
   if ((plan.textBehind || plan.backgroundLook) && sourceLayer.type === "video") {
     // Order (front → back): captions, lists, CTA, sounds · the person · titles, numbers, key phrases.
