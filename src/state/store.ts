@@ -11,6 +11,8 @@ import type {
 } from "../types";
 import { createDefaultProject, createLayer } from "../engine/factory";
 import { evaluateTransform } from "../engine/evaluate";
+import { applyPresetToLayer, type PresetId } from "../engine/presets";
+import { buildTemplateLayers, type TemplateId } from "../engine/templates";
 import { makeId } from "../utils/id";
 
 const MAX_HISTORY = 100;
@@ -40,6 +42,8 @@ interface EditorState {
   updateLayerProps: (layerId: string, patch: Record<string, unknown>) => void;
   updateLayerTiming: (layerId: string, startTime: number, endTime: number) => void;
   moveLayer: (layerId: string, direction: "up" | "down") => void;
+  applyMotionPreset: (layerId: string, presetId: PresetId) => void;
+  applyTemplate: (templateId: TemplateId) => void;
 
   setPlayhead: (time: number) => void;
   play: () => void;
@@ -173,6 +177,20 @@ export const useEditorStore = create<EditorState>((set, get) => {
         [layers[idx], layers[swapWith]] = [layers[swapWith], layers[idx]];
         return { ...p, composition: { ...p.composition, layers } };
       }),
+
+    applyMotionPreset: (layerId, presetId) =>
+      commit((p) => ({
+        ...p,
+        composition: mapLayers(p.composition, layerId, (l) => applyPresetToLayer(l, presetId, p.composition)),
+      })),
+
+    applyTemplate: (templateId) => {
+      const layers = buildTemplateLayers(templateId, get().project.composition);
+      commit(
+        (p) => ({ ...p, composition: { ...p.composition, layers: [...layers, ...p.composition.layers] } }),
+        { selectedLayerId: layers[0]?.id ?? null }
+      );
+    },
 
     setPlayhead: (time) =>
       set((s) => ({ playhead: Math.max(0, Math.min(s.project.composition.duration, time)) })),

@@ -5,6 +5,7 @@ import type {
   CaptionLayerProps,
   CaptionWord,
   Easing,
+  GlassLayerProps,
   ImageLayerProps,
   Layer,
   PolygonLayerProps,
@@ -18,6 +19,7 @@ import { useEditorStore } from "../state/store";
 import { evaluateTransform } from "../engine/evaluate";
 import { PROPERTY_COLORS } from "./Timeline/constants";
 import type { ModelSize, TranscribeProgress } from "../engine/transcribe";
+import { MOTION_PRESETS } from "../engine/presets";
 import { makeId } from "../utils/id";
 
 const EASINGS: Easing[] = ["linear", "easeIn", "easeOut", "easeInOut"];
@@ -120,6 +122,7 @@ export function PropertiesPanel() {
   const updateLayerTiming = useEditorStore((s) => s.updateLayerTiming);
   const updateLayerProps = useEditorStore((s) => s.updateLayerProps);
   const setStaticValue = useEditorStore((s) => s.setStaticValue);
+  const applyMotionPreset = useEditorStore((s) => s.applyMotionPreset);
   const comp = useEditorStore((s) => s.project.composition);
 
   if (!layer) {
@@ -196,6 +199,9 @@ export function PropertiesPanel() {
             onChange={(p) => updateLayerProps(layer.id, p)}
           />
         )}
+        {layer.type === "glass" && (
+          <GlassFields props={layer.props as GlassLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
+        )}
         {layer.type === "image" && (
           <ImageFields props={layer.props as ImageLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
         )}
@@ -209,6 +215,24 @@ export function PropertiesPanel() {
           />
         )}
       </div>
+
+      {layer.type !== "audio" && (
+      <div className="properties-section">
+        <h4>Motion presets</h4>
+        <div className="preset-grid">
+          {MOTION_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              title={preset.description}
+              onClick={() => applyMotionPreset(layer.id, preset.id)}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      )}
 
       {layer.type !== "audio" && (
       <div className="properties-section">
@@ -666,6 +690,35 @@ function CaptionFields({
           </div>
         </>
       )}
+    </>
+  );
+}
+
+function GlassFields({ props: p, onChange }: { props: GlassLayerProps; onChange: (p: Partial<GlassLayerProps>) => void }) {
+  return (
+    <>
+      <div className="field-row">
+        <label className="field">
+          <span>Width</span>
+          <input type="number" value={p.width} onChange={(e) => onChange({ width: parseFloat(e.target.value) || 1 })} />
+        </label>
+        <label className="field">
+          <span>Height</span>
+          <input type="number" value={p.height} onChange={(e) => onChange({ height: parseFloat(e.target.value) || 1 })} />
+        </label>
+      </div>
+      <div className="field-row">
+        <label className="field">
+          <span>Corner radius</span>
+          <input type="number" value={p.radius} onChange={(e) => onChange({ radius: parseFloat(e.target.value) || 0 })} />
+        </label>
+        <label className="field">
+          <span>Blur</span>
+          <input type="number" value={p.blur} onChange={(e) => onChange({ blur: parseFloat(e.target.value) || 0 })} />
+        </label>
+      </div>
+      <p className="hint">Blurs whatever is already drawn behind it (video, shapes…) — a real frosted-glass look.</p>
+      <p className="hint">Rotation isn't supported on glass panels (position, scale and opacity still work).</p>
     </>
   );
 }

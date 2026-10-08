@@ -24,7 +24,17 @@ export interface LayerTransform {
   opacity: AnimatedProperty<number>; // 0..1
 }
 
-export type LayerType = "text" | "rect" | "ellipse" | "polygon" | "star" | "image" | "video" | "audio" | "caption";
+export type LayerType =
+  | "text"
+  | "rect"
+  | "ellipse"
+  | "polygon"
+  | "star"
+  | "image"
+  | "video"
+  | "audio"
+  | "caption"
+  | "glass";
 
 export interface TextLayerProps {
   content: string;
@@ -102,6 +112,15 @@ export interface CaptionLayerProps {
   sourceLayerName: string; // informational only
 }
 
+export interface GlassLayerProps {
+  width: number;
+  height: number;
+  radius: number;
+  blur: number; // px
+  tint: string; // rgba() overlay color on top of the blurred sample
+  borderColor: string;
+}
+
 export interface Layer {
   id: string;
   name: string;
@@ -117,7 +136,8 @@ export interface Layer {
     | ImageLayerProps
     | VideoLayerProps
     | AudioLayerProps
-    | CaptionLayerProps;
+    | CaptionLayerProps
+    | GlassLayerProps;
 }
 
 export interface Composition {

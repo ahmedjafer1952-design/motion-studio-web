@@ -247,6 +247,17 @@ textarea {
   border-color: #ffd166;
 }
 
+.preset-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.preset-grid button {
+  font-size: 11px;
+  padding: 6px 4px;
+  text-align: center;
+}
+
 .anim-row {
   margin-bottom: 10px;
 }

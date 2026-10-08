@@ -3,6 +3,7 @@ import type {
   CaptionLayerProps,
   CaptionWord,
   Composition,
+  GlassLayerProps,
   Layer,
   ImageLayerProps,
   PolygonLayerProps,
@@ -318,6 +319,41 @@ function drawCaption(ctx: CanvasRenderingContext2D, p: CaptionLayerProps, t: num
   }
 }
 
+/**
+ * Draws a real frosted-glass panel: blurs whatever has already been painted onto the
+ * canvas beneath this layer's bounds, then adds a translucent tint + border on top.
+ * Drawn in absolute canvas space (rotation is not supported, only position/scale/opacity)
+ * because the blur self-sample needs raw pixel coordinates, not the rotated/scaled local
+ * space the generic per-layer transform block works in.
+ */
+function drawGlassPanel(ctx: CanvasRenderingContext2D, layer: Layer, time: number) {
+  if (time < layer.startTime || time > layer.endTime) return;
+  const t = evaluateTransform(layer.transform, time);
+  if (t.opacity <= 0) return;
+  const p = layer.props as GlassLayerProps;
+  const w = Math.max(1, p.width * t.scale.x);
+  const h = Math.max(1, p.height * t.scale.y);
+  const x = t.position.x - w / 2;
+  const y = t.position.y - h / 2;
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, t.opacity));
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, Math.min(p.radius, w / 2, h / 2));
+  ctx.save();
+  ctx.clip();
+  ctx.filter = `blur(${p.blur}px)`;
+  ctx.drawImage(ctx.canvas, 0, 0);
+  ctx.restore(); // drop the clip + filter, keep the rounded-rect path below
+
+  ctx.fillStyle = p.tint;
+  ctx.fill();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = p.borderColor;
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, opts: Required<RenderOptions>) {
   const active = time >= layer.startTime && time <= layer.endTime;
 
@@ -335,6 +371,9 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
       syncMediaElement(audio, active, p.trimIn + (time - layer.startTime), p.muted, opts.playing);
     }
     return; // audio layers have nothing to draw
+  } else if (layer.type === "glass") {
+    drawGlassPanel(ctx, layer, time);
+    return;
   }
 
   if (!active) return;

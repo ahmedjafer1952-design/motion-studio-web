@@ -58,6 +58,15 @@ function defaultProps(type: LayerType): Layer["props"] {
         sourceTrimIn: 0,
         sourceLayerName: "",
       };
+    case "glass":
+      return {
+        width: 420,
+        height: 160,
+        radius: 24,
+        blur: 18,
+        tint: "rgba(255,255,255,0.10)",
+        borderColor: "rgba(255,255,255,0.28)",
+      };
   }
 }
 

@@ -3,6 +3,7 @@ import { useEditorStore } from "../state/store";
 import type { Project } from "../types";
 import { downloadBlob } from "../utils/download";
 import { exportCompositionToVideo } from "../engine/export";
+import { MOTION_TEMPLATES, type TemplateId } from "../engine/templates";
 
 function formatTime(t: number): string {
   const m = Math.floor(t / 60);
@@ -26,6 +27,7 @@ export function Toolbar() {
   const redo = useEditorStore((s) => s.redo);
   const canUndo = useEditorStore((s) => s.past.length > 0);
   const canRedo = useEditorStore((s) => s.future.length > 0);
+  const applyTemplate = useEditorStore((s) => s.applyTemplate);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -100,6 +102,27 @@ export function Toolbar() {
         <button onClick={() => addLayer("video")}>🎬 Video</button>
         <button onClick={() => addLayer("audio")}>🔊 Audio</button>
         <button onClick={() => addLayer("caption")}>💬 Captions</button>
+        <button onClick={() => addLayer("glass")}>◐ Glass</button>
+      </div>
+
+      <div className="toolbar-group">
+        <select
+          value=""
+          title="Insert a motion library template"
+          onChange={(e) => {
+            if (e.target.value) applyTemplate(e.target.value as TemplateId);
+            e.target.value = "";
+          }}
+        >
+          <option value="" disabled>
+            ➕ Template…
+          </option>
+          {MOTION_TEMPLATES.map((t) => (
+            <option key={t.id} value={t.id} title={t.description}>
+              {t.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="toolbar-group">

@@ -4,12 +4,18 @@ A browser-based motion graphics editor, inspired by After Effects: layers, a
 keyframeable timeline, a canvas-based compositor, and video export — all
 running client-side, no backend or account required.
 
-## Features (v0.3)
+## Features (v0.4)
 
 - **Layers**: text, rectangle, ellipse, polygon (3–12 sides), star, image,
   video (import an mp4/webm clip, trim its in-point), audio (import mp3/wav,
-  trim its in-point), and **captions** (auto-generated from a video/audio
-  layer's speech, Arabic-first).
+  trim its in-point), captions (auto-generated from a video/audio layer's
+  speech, Arabic-first), and a **glass panel** (real frosted-glass blur over
+  whatever's behind it).
+- **Motion library**: one-click templates that insert a ready-animated group
+  of layers — Title Card, Lower Third, Badge/Capsule, CTA Button (with a
+  looping pulse), Big Number, Animated List — plus 10 **motion presets**
+  (fade/zoom/slide/pop/pan) you can apply to *any* layer from its properties
+  panel to animate it in or out.
 - **Auto captions**: fully in-browser speech-to-text (Whisper via
   `@xenova/transformers`, no server/upload), word-level timestamps, Arabic
   language hint. Correct any word afterwards — timestamps stay put. Star a
@@ -62,6 +68,10 @@ src/
     export.ts            # records the canvas (+ mixed audio) to a .webm Blob
     factory.ts            # default project/layer constructors
     transcribe.ts          # in-browser Whisper speech-to-text (lazy-loaded)
+    presets.ts              # motion presets — inject entrance/exit keyframes
+                             # onto an existing layer
+    templates.ts             # motion library — builds ready-animated groups
+                              # of layers (title card, lower third, etc.)
   state/
     store.ts            # Zustand store: project state, undo/redo, actions
   components/
@@ -79,18 +89,19 @@ interferes with whatever the user is doing in the live editor.
 
 ## Roadmap ideas
 
-This is the "Auto Captions" slice of a larger plan (see below). Next up, in
-order:
+This covers "Auto Captions" and a first "Motion Library" slice of a larger
+plan. Next up, in order:
 
-- **Motion library**: a template/preset system — titles, number callouts,
-  lists, CTA buttons, badges, a real glass-blur-over-video layer, cards,
-  orbiting icons, camera-move transitions — each inserted as a single
-  pre-animated layer group that adapts to its text/size.
+- **More motion library components**: orbiting icons, cards, a proper
+  camera-move/transition preset between two layers, more templates.
 - **Faceless scenes**: full background scene templates (neon, product
   mockup, paper collage, etc.) for when you don't want to show a person.
 - **Auto Edit**: ties the above together — transcribes + understands speech
   (detects lists, numbers, emphasis), and automatically assembles a first
   cut (titles, zooms, transitions on pauses, a CTA) as one undoable step.
+- **Sound library**: procedurally-generated UI sound effects (pop, whoosh,
+  ding…) via the Web Audio API, playable on template insert and mixed into
+  export.
 
 Smaller items:
 - Drag keyframes directly on the timeline (currently edited via the
@@ -99,6 +110,7 @@ Smaller items:
   IndexedDB) instead of session-only object URLs.
 - A visible waveform for audio/video layers on the timeline.
 - More caption styles; editable word timing (currently text-only correction).
+- Rotation support for glass panels (currently position/scale/opacity only).
 - Optional server-side rendering backend (e.g. your own machine running a
   small render worker) for faster/higher-quality exports — the data model
   and renderer are already decoupled from the UI, so a Node/ffmpeg render
