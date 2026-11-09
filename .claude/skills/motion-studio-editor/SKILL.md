@@ -1,0 +1,133 @@
+---
+name: motion-studio-editor
+description: Expert knowledge of Motion Studio — an Arabic-first browser motion-graphics editor with Claude Auto Edit. Use whenever the user pastes a Motion Studio Auto Edit request (it starts "You are an experienced short-form video editor…" and ends with a JSON shape), asks how to use the editor or any of its libraries (sounds, captions, templates, color grades, backgrounds, person cutout), wants editing advice for Arabic/Iraqi short-form video, or works on this repository's code.
+---
+
+# Motion Studio — دليل Claude الكامل
+
+Motion Studio محرر موشن غرافيك يشتغل بالمتصفح (React + Canvas)، مخصص للمحتوى العربي القصير (ريلز / تيك توك / شورتس)، والذكاء الاصطناعي مالته Claude.
+المستخدم غالبًا يحچي عراقي — **جاوبه دائمًا بالعراقي، بخطوات بسيطة ومرقّمة**، لأنه مو تقني.
+
+---
+
+## ١. لما يلصق المستخدم "طلب Auto Edit" (أهم شغلة)
+
+الطلب يبدي بـ `You are an experienced short-form video editor…` وفيه transcript بشكل `index|start seconds|word` وينتهي بشكل JSON.
+
+**جاوب بـ JSON واحد بس** — بدون أي كلام قبله أو بعده (ممكن داخل ```json). الحقول بالضبط مثل الشكل بآخر الطلب.
+
+### خطوات التفكير قبل ما تكتب الـ JSON
+1. **افهم شنو انكال فعلًا.** الـ transcript من موديل كلام بالمتصفح وغالبًا مخربط بالعراقي: كلمات مخترعة، و"ويعتبر" تتكرر وهي ما انكالت، وكلمات ملزوقة. اقرأ الجمل كاملة ويا ملاحظات المستخدم وخمّن الكلام الحقيقي.
+2. **صلّح الكابشن أول شي — هذا أهم جزء:**
+   - `corrections`: كلمة وحدة غلط → كلمة وحدة صح (نفس الـ index). `text: ""` يمسح كلمة ما انكالت.
+   - `rewrites`: أي مقطع مخربط `fromWord..toWord` → النص الصحيح كامل بالعراقي. البرنامج يوزّع الكلمات الجديدة على نفس الوقت. **لا تتداخل المقاطع.** إذا الكلمة داخل rewrite لا تحطها بـ corrections.
+3. **وزّع "لحظات الشاشة" بالوقت بدون تداخل** (عنوان، عبارات، أرقام، قوائم، B-roll): كل وحدة تاخذ تقريبًا 2.4 ثانية (القائمة: من أول عنصر لآخر عنصر + 2.5 ث)، واترك ثانية فاصل. **البرنامج يحذف أي شي يتصادم** — فاحسبها بنفسك من timestamps.
+4. **النص القصير يطلع كبير ونظيف:** عبارة 2–4 كلمات، عنصر قائمة 2–3 كلمات، label الرقم 1–2 كلمة، عنوان 2–4 كلمات، CTA ≤ 4 كلمات.
+5. **كل الكتابة بالعراقي** (أو لهجة المتكلم)، مو فصحى.
+
+### القيم المسموحة
+| الحقل | القيم |
+|---|---|
+| `captionStyle` | `glassPill` كبسولة زجاج (تعليمي/مرتب) · `phraseStack` سطر عريض وأسطر أصغر (احترافي/إعلانات) · `bigWord` كلمة كبيرة (حماسي) · `karaokeLine` · `pillWord` · `emphasisOnly` (هادي) · `buildUp` |
+| `keyPhrases[].look` | `neon` كلمة وحدة قوية/اسم · `box` صندوق بلون الهوية (حقائق/أسماء/أماكن) · `glass` كبسولة زجاج (جمل هادية) · `stretch` كشيدة ممطوطة (كشف درامي/hook) — نوّع بيناتهن، وحط أهم كلمة بين `[ ]` |
+| `zooms[].strength` | `light` / `strong` (قليل) — هادي ≈ كل 8–10ث، متوسط ≈ 5–6ث، سريع ≈ 3ث |
+| `sounds[].sound` | راجع جدول الأصوات تحت |
+| `colorGrade` | `none` `tealOrange` `moodyBlue` `warmFilm` `noir` `vintageSepia` `highContrast` `cyberpunk` `fadedPastel` `goldenHour` `dayForNight` |
+| `accentColor` | لون hex واحد: بنفسجي `#7c3aed` تاريخ/فخامة · فيروزي `#0d9488` عقار/تقنية · أحمر `#dc2626` استعجال/تعليم · ذهبي `#d4a017` فلوس · أزرق `#2563eb` تعليمي هادي |
+| `broll` | 2–5 أماكن لصورة توضيحية، `atWord`→`endWord` (2–5 ث)، `description` بالعراقي وواضح للبحث. مو بلحظات الوجه/العاطفة |
+
+### قواعد "ستايل البيت"
+- **Hook بأول ثانيتين**: عنوان أو `stretch` على أول جملة.
+- بعدها شي يتغير كل 3–6 ثواني — **بس النوعية قبل الكثرة**: 3–5 عبارات لمقطع 30 ثانية تكفي.
+- القوائم ≤ 4 عناصر، وبس إذا المتكلم فعلًا يعدد. الأرقام بس اللي انكالت، لا تخترع.
+- `emphasis` (index من الـ transcript الأصلي): أسماء، أرقام، كلمة التضاد ("بس"، "لكن")، أفعال قوية، كلمة الموضوع — تقريبًا كلمة من كل 8–10، مو ضمائر ولا حشو. كلمة داخل rewrite ما تتلوّن.
+- الأصوات: `whoosh/swoosh` ويا الكروت، `pop` ويا الأرقام، `ding/chime` ويا نقطة مهمة، `impact` ويا punchline، `riser` قبل كشف، `success` بالنهاية. لا أصوات تحت لحظة جدية/عاطفية، وأقصى شي صوت كل 4 ثواني.
+- إذا `Title: none` → `"title": null`. إذا `CTA: none` → `"cta": null`. إذا "use exactly" → نفس النص.
+- `summary`: جملتين بالعراقي الودّي — شنو صلّحت بالكابشن + فكرة المونتاج.
+
+### مثال مختصر صحيح
+```json
+{"corrections":[{"index":2,"text":"تواجه"},{"index":25,"text":""}],
+ "rewrites":[{"fromWord":5,"toWord":8,"text":"اللي هي الضياع والدوخة"}],
+ "emphasis":[1,10,22],"captionStyle":"glassPill","title":null,"numbers":[],
+ "lists":[{"items":[{"atWord":34,"text":"محاضرات بالتسلسل"},{"atWord":39,"text":"بدون إعلانات"}]}],
+ "keyPhrases":[{"atWord":0,"text":"أكبر [مشكلة]","look":"stretch"},{"atWord":22,"text":"[منصة] خاصة بيك","look":"neon"}],
+ "accentColor":"#7c3aed","broll":[{"atWord":17,"endWord":19,"description":"طالب محتار گدامه كومة ملازم"}],
+ "zooms":[{"atWord":10,"strength":"light"}],"sounds":[{"atWord":1,"sound":"impact"},{"atWord":66,"sound":"success"}],
+ "colorGrade":"moodyBlue","cta":"اكتب فيزياء بالتعليقات","summary":"صلّحت الكابشن... والمونتاج هادي وفخم."}
+```
+
+---
+
+## ٢. شنو موجود بالبرنامج (حتى تشرح للمستخدم)
+
+### مكتبة الأصوات (19 صوت، تنصنع بالبرنامج نفسه — بدون حقوق)
+| id | الاسم | الاستخدام |
+|---|---|---|
+| `pop` | بوب | ظهور عنصر، رقم |
+| `whoosh` | ووش | انتقال، حركة كاميرا |
+| `swoosh` | سووش | دخول نص أو كرت |
+| `ding` | دينغ | تنبيه، نقطة مهمة |
+| `chime` | جرس موسيقي | لحظة لطيفة |
+| `click` | كليك | زر، تفاعل |
+| `tick` | تك | نقرة سريعة جدًا |
+| `drumHit` | ضربة طبل | تأكيد قوي |
+| `impact` | ارتطام | لحظة قوية، punchline |
+| `riser` | رايزر | توتر قبل الكشف |
+| `bubble` | فقاعة | مرح |
+| `laser` | ليزر | خيال علمي |
+| `coin` | عملة | مكافأة، فلوس، نقاط |
+| `notification` | إشعار | تنبيه هادي |
+| `typewriterKey` | آلة كاتبة | كتابة نص حرف حرف |
+| `camera` | غالق كاميرا | صورة، لقطة |
+| `magic` | سحري | تحوّل، لحظة سحرية |
+| `drop` | قطرة ماء | هادي، انتقال ناعم |
+| `success` | نجاح | النهاية، إنجاز |
+المكان: 📚 المكتبة ← 🔊 مكتبة الأصوات (تسمع قبل ما تضيف). ويكدر يستورد أي صوت/موسيقى من 📥 استيراد فيديو.
+
+### الطبقات (Layers)
+Text، Rect، Ellipse، Polygon، Star، Image، Video، Audio، Captions، Glass (لوحة زجاج حقيقية)، Overlay (حبيبات/VHS/تظليل/أشرطة سينمائية/خطوط مسح)، Chart (أعمدة/دائري/شريط تقدم/خط — الأرقام تعد)، Arrow (سهم منقّط ينرسم)، Person cutout (الشخص مفصول — للكتابة ورا الشخص).
+
+### خيارات النص
+تمييز كلمة بـ `[ ]`، نيون (glow)، إطار فقط (outline)، كشيدة تتمطط (stretch)، كلمة كلمة بحركة زنبرك (word-by-word)، شريط فلوماستر ورا النص (highlight bar)، صندوق لون أو كبسولة زجاج (label box)، آلة كاتبة، عدّاد أرقام. خطوط: Alexandria، Readex Pro، Rubik، Cairo، Tajawal، Lalezar، Playfair (للأرقام)… و**"＋ رفع خط"** لأي خط عند المستخدم (يبقى بمتصفحه بس — مثل خط ثمانية؛ رخصته تمنع رفعه لأي سيرفر).
+
+### الحركات (Motion presets)
+Fade In/Out، Fade Up، Zoom In/Out، Slide In (4 جهات)، Slide Out ←، Pop In، Spring In، Pulse، Shake، Scale Out، Camera Pan، Whip Pan ←/→، Zoom Punch، Glitch Cut. أنواع الحركة: linear، easeIn/Out/InOut، **spring** (زنبرك)، **backOut**.
+
+### القوالب (المكتبة)
+- **نصوص وعناوين:** Label Boxes (ستايل بوستر)، Word Reveal، Marker Headline، Brand Reveal، Title Card، Lower Third، Typewriter، Highlighted Text.
+- **قوائم ومؤشرات:** Info Cards (كروت زجاج ويا أيقونات)، Big Number + Label، Stat Hero (دائري + نسبة)، Bar Chart، Big Number، Animated List، Count-Up، Stat Card، Comparison Card.
+- **حركة:** Glow Circle (دائرة متوهجة ورا الشخص)، Orbiting Icons، ستيكرز إيموجي متحركة (🔥❤️⭐👍🎉💡✅😂).
+- **فيسلس:** 6 مشاهد × 4 ألوان (Neon، Product، 3D Mockup، Paper Collage، Pinned Note، Bouncing Words).
+- **كابشن:** 7 ستايلات (فوق).
+- **تلوين سينمائي:** 11 لوك (فوق).
+
+### فصل الشخص والخلفية (كلشي على الجهاز، بدون إنترنت)
+- اضغط طبقة الفيديو ← **🎨 تغيير الخلفية**: الأصلية، ضبابية، ستوديو (غامق/دافئ/أزرق/بنفسجي/فيروزي/أبيض)، لون، صورة (ويا "عمق" ضبابية مثل الكاميرا)، **فيديو تحته** (الشخص بس، وأي طبقة تحته تصير خلفية).
+- **دقة الفصل:** سريعة / عالية (شعر وملابس أدق). **الحواف:** صغّرها تشيل الهالة، كبّرها تحافظ على الشعر. **دمج الإضاءة:** ضوء الخلفية يلف الحواف.
+- **👤 كتابة ورا الشخص:** أي كتابة تحت طبقة الشخص تطلع وراه.
+- نصايح تصوير بدون ستوديو: الضوء على الوجه (مقابل الشباك)، لا ضوء وراك، لبس يختلف عن الحايط، ابتعد متر عن الحايط.
+
+### Auto Edit (3 خطوات)
+١. **الإعداد**: الطريقة (💬 اشتراك Claude بالنسخ واللصق / 🤖 Claude تلقائي بمفتاح API / ⚡ قواعد بدون ذكاء)، ملاحظات (ويا أزرار جاهزة)، الإيقاع، لون الهوية، الكتابة ورا الشخص، الخلفية (أبيض وأسود/معتّمة/مضبّبة/🎨 ستوديو بلون الهوية)، العنوان والـ CTA، إعدادات متقدمة (دقة الكلام: عالية مستحسنة للعراقي).
+٢. **Claude يمنتج**: ينسخ الطلب ← يلصقه بمحادثة Claude ← يرجع الجواب.
+٣. **المراجعة**: ملخص شنو راح ينضاف + **الكابشن كنص يتصلّح بالإيد** (لا يضيف ولا يمسح أسطر) ← ✨ طبّق. **Ctrl+Z** يرجّع كلشي بخطوة وحدة.
+البرنامج بعدها: يمنع التداخل، يصغّر الخط حتى يدخل بالشاشة، الكروت على الصدر مو على الوجه، الـ B-roll ورا الشخص (إطار منقّط "📷 حط هنا صورة" بالمعاينة فقط).
+
+---
+
+## ٣. تشغيل البرنامج (Windows / PowerShell)
+```
+cd $HOME\Desktop\motion-studio-web
+git pull
+npm install        (بس إذا انضافت مكتبات)
+npm run dev
+```
+ثم Chrome على http://localhost:5173 و **Ctrl+Shift+R**. إذا "running scripts is disabled": `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
+- مفتاح Claude API ≠ اشتراك claude.ai (حسابين منفصلين). بدون رصيد API يستخدم 💬 النسخ واللصق.
+- الملفات والخطوط والمفتاح محفوظة بمتصفح الجهاز؛ لجهاز ثاني: Save المشروع ← Load.
+
+## ٤. للمبرمج (هيكل الكود)
+- `src/engine/renderer.ts` الرسم، `autoEdit.ts` (EditPlan → طبقات + جدولة اللحظات)، `aiEdit/` (prompt، schema، manual paste، client)، `segmentation.ts` (MediaPipe محلي + تنعيم الحواف)، `captionReview.ts`، `customFonts.ts`، `chart.ts`.
+- الموديلات بـ `public/models/` (Apache-2.0). لا ترفع خطوط مرخّصة للريبو.
+- قبل أي push: `npx tsc -b && npx vitest run && npm run build`.
