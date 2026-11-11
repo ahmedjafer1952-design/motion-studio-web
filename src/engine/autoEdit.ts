@@ -1,6 +1,7 @@
 import type { VideoLayerProps, VideoLook, GlassLayerProps, CaptionLayerProps, CaptionStyle, CaptionWord, ColorGradeId, Composition, Layer, TextLayerProps } from "../types";
 import { soundSrcId, type SoundId } from "./sounds";
 import { createLayer } from "./factory";
+import { segmentsDuration, sourceToLocal } from "./cuts";
 import { makeRect, makeText } from "./builders";
 import { applyPresetToLayer } from "./presets";
 import type { TranscribedWord } from "./transcribe";
@@ -355,6 +356,10 @@ export interface EditPlan {
   backgroundLook?: VideoLook | null;
   /** Replace the real background with a studio backdrop lit in the brand color. */
   studioBackground?: boolean;
+  /** Jump cuts (source seconds) to keep; set by the dialog from pauses + Claude's removals. */
+  segments?: { start: number; end: number }[];
+  /** Filler / false starts / retakes Claude marked for removal (source seconds). */
+  removeRanges?: { start: number; end: number }[];
   /** "editorial" = restrained modern pro look; "bold" = high-energy reels look. */
   style?: EditStyle;
   zooms: { time: number; strength: "light" | "strong" }[];
@@ -399,7 +404,14 @@ export function buildEditFromPlan(
   plan: EditPlan
 ): AutoEditResult {
   const newLayers: Layer[] = [];
-  const toCompTime = (sourceTime: number) => sourceLayer.startTime + (sourceTime - sourceTrimIn);
+  const segments = plan.segments && plan.segments.length ? plan.segments : null;
+  const originalEnd = sourceLayer.endTime;
+  if (segments) {
+    // Jump cuts shorten the clip; everything below is laid out on the edited timeline.
+    sourceLayer = { ...sourceLayer, endTime: sourceLayer.startTime + segmentsDuration(segments) };
+  }
+  const toCompTime = (sourceTime: number) =>
+    sourceLayer.startTime + (segments ? sourceToLocal(sourceTime, segments) : sourceTime - sourceTrimIn);
   const inClip = (t: number, tail = 0) => t >= sourceLayer.startTime && t <= sourceLayer.endTime - tail;
   const vertical = comp.height > comp.width;
   const accent = plan.accent ?? null;
@@ -424,6 +436,7 @@ export function buildEditFromPlan(
     emphasisColor: accent ?? (plan.captionStyle === "phraseStack" ? ACCENT_RED : "#ffd166"),
     fontFamily: plan.captionStyle === "phraseStack" || plan.captionStyle === "glassPill" ? DISPLAY_FONT : "'Cairo', sans-serif",
     sourceTrimIn,
+    segments: segments ?? undefined,
     sourceLayerName: sourceLayer.name,
   } as CaptionLayerProps;
   if (plan.captionStyle === "glassPill") {
@@ -655,6 +668,7 @@ export function buildEditFromPlan(
 
   // Zoom "punches", applied directly to the source layer's own scale.
   const updatedSourceLayer: Layer = JSON.parse(JSON.stringify(sourceLayer));
+  if (segments) (updatedSourceLayer.props as VideoLayerProps).segments = segments;
   const baseScale = updatedSourceLayer.transform.scale.static;
   const scaleKfs = [...updatedSourceLayer.transform.scale.keyframes];
   let lastZoom = -Infinity;
@@ -739,6 +753,11 @@ export function buildEditFromPlan(
 
   const compPatch: Partial<Composition> = {};
   if (sourceLayer.endTime > comp.duration) compPatch.duration = sourceLayer.endTime;
+  // The clip got shorter: if it was what set the project's length, shrink the project with it.
+  if (segments && originalEnd >= comp.duration - 0.05) {
+    const othersEnd = Math.max(0, ...comp.layers.filter((l) => l.id !== sourceLayer.id).map((l) => l.endTime));
+    compPatch.duration = Math.max(sourceLayer.endTime, Math.min(othersEnd, comp.duration));
+  }
   if (plan.colorGrade) compPatch.colorGrade = plan.colorGrade;
 
   return { newLayers, updatedSourceLayer, compPatch };

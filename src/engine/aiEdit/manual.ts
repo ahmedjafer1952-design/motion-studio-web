@@ -9,6 +9,7 @@ const FORMAT = `Reply with ONLY one JSON object (no explanation before or after)
 {
   "corrections": [{"index": 12, "text": "fixed word"}],
   "rewrites": [{"fromWord": 35, "toWord": 46, "text": "what was really said here"}],
+  "removals": [{"fromWord": 20, "toWord": 22}],
   "emphasis": [3, 17],
   "captionStyle": "bigWord | karaokeLine | pillWord | emphasisOnly | buildUp | phraseStack | glassPill | minimal",
   "title": "string or null",
@@ -47,6 +48,7 @@ export function parseManualReply(text: string): ClaudeEditOutput {
   return {
     corrections: arr(o.corrections, (x) => ({ index: int(x.index), text: str(x.text) })),
     rewrites: arr(o.rewrites, (x) => ({ fromWord: int(x.fromWord), toWord: int(x.toWord), text: str(x.text) })),
+    removals: arr(o.removals, (x) => ({ fromWord: int(x.fromWord), toWord: int(x.toWord) })),
     emphasis: Array.isArray(o.emphasis) ? o.emphasis.map(int) : [],
     captionStyle: str(o.captionStyle),
     title: o.title == null ? null : str(o.title),

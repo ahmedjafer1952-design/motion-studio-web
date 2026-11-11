@@ -6,6 +6,7 @@ import { planFromRules, type EditPlan, type Pace } from "../engine/autoEdit";
 import { aiSettings, fetchClaudeEdit, planFromClaude } from "../engine/aiEdit/client";
 import { isSpeechSource } from "../engine/mediaStore";
 import { buildManualPrompt, parseManualReply } from "../engine/aiEdit/manual";
+import { computeSegments, segmentsDuration, type Segment } from "../engine/cuts";
 import { applyCaptionEdits, captionLines, emphasisKeys, linesToText } from "../engine/captionReview";
 
 // Auto Edit as a short wizard: set up → (transcribe + Claude) → review captions and what will be
@@ -46,6 +47,7 @@ function planSummary(plan: EditPlan): string[] {
   if (items) out.push(`${items} كروت للنقاط`);
   if (plan.numbers.length) out.push(`${plan.numbers.length} رقم كبير`);
   if (plan.keyPhrases.length) out.push(`${plan.keyPhrases.length} عبارات مميزة`);
+  if (plan.removeRanges?.length) out.push(`✂️ ${plan.removeRanges.length} مقاطع حشو/إعادة تنقص`);
   if (plan.broll?.length) out.push(`${plan.broll.length} أماكن لصور توضيحية`);
   if (plan.zooms.length) out.push(`${plan.zooms.length} زوم`);
   if (plan.sounds.length) out.push(`${plan.sounds.length} مؤثرات صوتية`);
@@ -78,6 +80,8 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
   const [style, setStyle] = useState<"editorial" | "bold">("editorial");
   const [textBehind, setTextBehind] = useState(false);
   const [bgLook, setBgLook] = useState<"" | VideoLook | "studio">("");
+  const [jumpCuts, setJumpCuts] = useState(true);
+  const [cutSaved, setCutSaved] = useState(0);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [apiKey, setApiKey] = useState(aiSettings.getApiKey());
   const [accessCode, setAccessCode] = useState(aiSettings.getAccessCode());
@@ -188,10 +192,28 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
       setError(res.error);
       return;
     }
+    // Jump cuts: drop the words Claude marked as filler/retakes, then cut pauses and those ranges.
+    let words = res.words;
+    let emphasis = res.emphasis;
+    let segments: Segment[] | undefined;
+    if (jumpCuts) {
+      const remove = plan.removeRanges ?? [];
+      const inRemoved = (w: { start: number; end: number }) => remove.some((r) => w.start >= r.start - 0.01 && w.end <= r.end + 0.01);
+      const keptIdx = words.map((w, i) => (inRemoved(w) ? -1 : i)).filter((i) => i >= 0);
+      const nextEmphasis = new Set<number>();
+      keptIdx.forEach((orig, k) => emphasis.has(orig) && nextEmphasis.add(k));
+      words = keptIdx.map((i) => words[i]);
+      emphasis = nextEmphasis;
+      const trimIn = (source.props as VideoLayerProps | AudioLayerProps).trimIn ?? 0;
+      const clip = { start: trimIn, end: trimIn + (source.endTime - source.startTime) };
+      segments = computeSegments(words, clip, remove) ?? undefined;
+      setCutSaved(segments ? clip.end - clip.start - segmentsDuration(segments) : 0);
+    }
     applyEditPlan(source.id, {
       ...plan,
-      words: res.words,
-      emphasis: res.emphasis,
+      words,
+      emphasis,
+      segments,
       style,
       textBehind: isVideo && textBehind,
       backgroundLook: isVideo && bgLook && bgLook !== "studio" ? bgLook : null,
@@ -209,6 +231,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
       <div className="modal-backdrop">
         <div className="modal" dir="rtl">
           <h3>✅ المونتاج انضاف</h3>
+          {cutSaved > 0.5 && <p className="hint">✂️ انقص {cutSaved.toFixed(1)} ثانية من السكتات والحشو — الفيديو صار أسرع إيقاع.</p>}
           {claudeSummary && <p className="claude-summary">{claudeSummary}</p>}
           <ul className="hint">
             <li>شغّل الفيديو وشوف النتيجة.</li>
@@ -404,6 +427,11 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
                 </label>
               )}
             </div>
+
+            <label className="field field-checkbox">
+              <input type="checkbox" checked={jumpCuts} onChange={(e) => setJumpCuts(e.target.checked)} />
+              <span>✂️ قص السكتات والحشو والإعادات (Jump cuts) — مثل المونتير</span>
+            </label>
 
             {isVideo && (
               <div className="field-row">

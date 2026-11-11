@@ -132,6 +132,9 @@ export function planFromClaude(words: TranscribedWord[], out: ClaudeEditOutput):
     keyPhrases: out.keyPhrases
       .filter((k) => valid(k.atWord) && k.text.trim())
       .map((k) => ({ text: k.text.trim(), time: at(k.atWord), look: KEY_LOOKS.includes(k.look?.trim() as KeyPhraseLook) ? (k.look!.trim() as KeyPhraseLook) : "neon" })),
+    removeRanges: (out.removals ?? [])
+      .filter((r) => valid(r.fromWord) && valid(r.toWord) && r.toWord >= r.fromWord && r.toWord - r.fromWord < Math.max(12, n / 3))
+      .map((r) => ({ start: words[r.fromWord].start, end: words[r.toWord].end })),
     broll: (out.broll ?? [])
       .filter((b) => valid(b.atWord) && valid(b.endWord) && b.endWord >= b.atWord && b.description.trim())
       .slice(0, 6)

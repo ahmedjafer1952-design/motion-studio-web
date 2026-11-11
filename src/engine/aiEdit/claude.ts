@@ -19,6 +19,7 @@ const wordIndex = () => z.number().int().describe("Index of a word in the transc
 const ClaudeEditSchema = z.object({
   corrections: z.array(z.object({ index: wordIndex(), text: z.string() })),
   rewrites: z.array(z.object({ fromWord: wordIndex(), toWord: wordIndex(), text: z.string() })),
+  removals: z.array(z.object({ fromWord: wordIndex(), toWord: wordIndex() })),
   emphasis: z.array(wordIndex()),
   captionStyle: z.string().describe("One of: bigWord, karaokeLine, pillWord, emphasisOnly, buildUp, phraseStack, glassPill, minimal"),
   title: z.string().nullable(),

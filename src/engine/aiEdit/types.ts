@@ -21,6 +21,8 @@ export interface ClaudeEditOutput {
   corrections: { index: number; text: string }[];
   /** Garbled stretches re-written as what was actually said; the words are re-timed across the span. */
   rewrites?: { fromWord: number; toWord: number; text: string }[];
+  /** Stretches to cut out of the video entirely: filler, stutters, false starts, repeated takes. */
+  removals?: { fromWord: number; toWord: number }[];
   emphasis: number[];
   captionStyle: string; // validated against CaptionStyle when applied
   title: string | null;

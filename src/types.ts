@@ -102,6 +102,8 @@ export interface VideoLayerProps {
   naturalDuration: number; // source video's own duration, seconds
   muted: boolean;
   fadeBottom?: number; // 0–1: fraction of the bottom edge that fades to transparent (split-screen B-roll)
+  /** Jump cuts: source-time ranges played back to back (replaces trimIn when set). */
+  segments?: { start: number; end: number }[];
   look?: VideoLook; // background treatment, usually paired with a person cutout on top
   background?: VideoBackground; // replace everything behind the person
 }
@@ -146,6 +148,7 @@ export interface AudioLayerProps {
   trimIn: number; // seconds into the source audio where playback starts
   naturalDuration: number; // source audio's own duration, seconds
   muted: boolean;
+  segments?: { start: number; end: number }[];
 }
 
 export type CaptionStyle = "bigWord" | "karaokeLine" | "pillWord" | "emphasisOnly" | "buildUp" | "phraseStack" | "glassPill" | "minimal";
@@ -167,6 +170,8 @@ export interface CaptionLayerProps {
   fontFamily: string;
   /** trimIn of the source layer at the moment captions were generated, so timing stays in sync. */
   sourceTrimIn: number;
+  /** Same jump-cut segments as the source clip, so captions follow the edited timeline. */
+  segments?: { start: number; end: number }[];
   sourceLayerName: string; // informational only
 }
 

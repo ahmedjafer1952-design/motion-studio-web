@@ -46,10 +46,14 @@ export function applyCaptionEdits(
   edited.forEach((line, i) => {
     const parts = line.split(/\s+/).filter(Boolean);
     const { start, end } = lines[i];
+    const original = lines[i].words;
+    // Same number of words: keep each word's real timing (only the spelling changed).
+    // Otherwise spread the edited words evenly over the line's span.
+    const keepTiming = parts.length === original.length;
     const step = Math.max(0.12, end - start) / Math.max(1, parts.length);
     parts.forEach((p, k) => {
       if (emphasizedTexts.has(`${i}|${p}`)) emphasis.add(words.length);
-      words.push({ text: p, start: start + k * step, end: start + (k + 1) * step - 0.02 });
+      words.push(keepTiming ? { text: p, start: original[k].start, end: original[k].end } : { text: p, start: start + k * step, end: start + (k + 1) * step - 0.02 });
     });
   });
   return { words, emphasis };

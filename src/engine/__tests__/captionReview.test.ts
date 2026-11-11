@@ -20,6 +20,13 @@ describe("caption review", () => {
     expect(res.words[4].start).toBe(2);
     expect([...res.emphasis]).toEqual([1]);
   });
+  it("keeps real word timings when only the spelling changed", () => {
+    const lines = captionLines(words);
+    const res = applyCaptionEdits(lines, new Set(), "أكبر مشكلة تواجه\nالمحاضرات بالتسلسل");
+    if ("error" in res) throw new Error(res.error);
+    expect(res.words.map((x) => x.start)).toEqual(words.map((x) => x.start));
+    expect(res.words[2].text).toBe("تواجه");
+  });
   it("refuses a changed line count", () => {
     const res = applyCaptionEdits(captionLines(words), new Set(), "سطر واحد بس");
     expect("error" in res).toBe(true);

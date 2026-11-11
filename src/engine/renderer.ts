@@ -20,6 +20,7 @@ import type {
 } from "../types";
 import { evaluateTransform } from "./evaluate";
 import { drawChart } from "./chart";
+import { localToSource } from "./cuts";
 import { getPersonMask } from "./segmentation";
 import { drawLiquidGlass, drawLiquidGlassLocal } from "./liquidGlass";
 import { getColorGrade } from "./colorGrade";
@@ -184,11 +185,11 @@ export class MediaSession {
   resetMediaLayers(comp: Composition) {
     for (const l of this.mediaLayers(comp, "video")) {
       const p = l.props as VideoLayerProps;
-      seekAndPause(this.getVideo(p.src, l.id), p.trimIn);
+      seekAndPause(this.getVideo(p.src, l.id), p.segments?.[0]?.start ?? p.trimIn);
     }
     for (const l of this.mediaLayers(comp, "audio")) {
       const p = l.props as AudioLayerProps;
-      seekAndPause(this.getAudio(p.src, l.id), p.trimIn);
+      seekAndPause(this.getAudio(p.src, l.id), p.segments?.[0]?.start ?? p.trimIn);
     }
   }
 
@@ -238,12 +239,18 @@ function waitForMediaReady(el: HTMLMediaElement): Promise<void> {
 export const defaultSession = new MediaSession();
 
 /** Syncs a video/audio element's play/pause/seek state to the composition clock. Returns the element, or null if inactive/unavailable. */
+/** Where in the source file a media layer should be at `local` seconds into the layer. */
+function mediaTime(p: { trimIn: number; segments?: { start: number; end: number }[] }, local: number): number {
+  return p.segments ? localToSource(local, p.segments) : p.trimIn + local;
+}
+
 function syncMediaElement(
   el: HTMLMediaElement,
   active: boolean,
   desiredTime: number,
   muted: boolean,
-  playing: boolean
+  playing: boolean,
+  segments?: { start: number; end: number }[]
 ): void {
   el.muted = muted;
   // Past the end of the clip: hold the last frame instead of play() restarting it from 0 every frame.
@@ -254,7 +261,10 @@ function syncMediaElement(
   }
   if (playing) {
     if (el.paused) el.play().catch(() => {});
-    if (Math.abs(el.currentTime - desiredTime) > 0.35) {
+    // Correct real drift — and with jump cuts, jump as soon as playback runs past the current segment.
+    const seg = segments?.find((sg) => desiredTime >= sg.start - 0.001 && desiredTime <= sg.end + 0.001);
+    const pastCut = !!seg && (el.currentTime > seg.end + 0.03 || el.currentTime < seg.start - 0.03);
+    if (pastCut || Math.abs(el.currentTime - desiredTime) > 0.35) {
       try {
         el.currentTime = desiredTime;
       } catch {
@@ -1206,13 +1216,13 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
     const p = layer.props as VideoLayerProps;
     if (p.src) {
       const video = opts.session.getVideo(p.src, layer.id);
-      syncMediaElement(video, active, p.trimIn + (time - layer.startTime), p.muted, opts.playing);
+      syncMediaElement(video, active, mediaTime(p, time - layer.startTime), p.muted, opts.playing, p.segments);
     }
   } else if (layer.type === "audio") {
     const p = layer.props as AudioLayerProps;
     if (p.src) {
       const audio = opts.session.getAudio(p.src, layer.id);
-      syncMediaElement(audio, active, p.trimIn + (time - layer.startTime), p.muted, opts.playing);
+      syncMediaElement(audio, active, mediaTime(p, time - layer.startTime), p.muted, opts.playing, p.segments);
     }
     return; // audio layers have nothing to draw
   } else if (layer.type === "glass") {
@@ -1330,7 +1340,7 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
     }
     case "caption": {
       const p = layer.props as CaptionLayerProps;
-      const localTime = time - layer.startTime + p.sourceTrimIn;
+      const localTime = p.segments ? localToSource(time - layer.startTime, p.segments) : time - layer.startTime + p.sourceTrimIn;
       drawCaption(ctx, p, localTime);
       break;
     }
