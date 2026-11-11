@@ -7,7 +7,7 @@ import { COLOR_GRADES } from "../colorGrade";
 import type { TranscribedWord } from "../transcribe";
 import type { AiEditRequest, ClaudeEditOutput } from "./types";
 
-const CAPTION_STYLES: CaptionStyle[] = ["bigWord", "karaokeLine", "pillWord", "emphasisOnly", "buildUp", "phraseStack", "glassPill"];
+const CAPTION_STYLES: CaptionStyle[] = ["bigWord", "karaokeLine", "pillWord", "emphasisOnly", "buildUp", "phraseStack", "glassPill", "minimal"];
 const SOUND_IDS = new Set<string>([...SOUND_LIBRARY.map((s) => s.id), ...Object.keys(PACK_SOUND_ALIASES)]);
 const GRADE_IDS = new Set<string>(COLOR_GRADES.map((g) => g.id));
 

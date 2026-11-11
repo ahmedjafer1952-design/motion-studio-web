@@ -10,7 +10,7 @@ const FORMAT = `Reply with ONLY one JSON object (no explanation before or after)
   "corrections": [{"index": 12, "text": "fixed word"}],
   "rewrites": [{"fromWord": 35, "toWord": 46, "text": "what was really said here"}],
   "emphasis": [3, 17],
-  "captionStyle": "bigWord | karaokeLine | pillWord | emphasisOnly | buildUp | phraseStack | glassPill",
+  "captionStyle": "bigWord | karaokeLine | pillWord | emphasisOnly | buildUp | phraseStack | glassPill | minimal",
   "title": "string or null",
   "numbers": [{"atWord": 5, "value": "70%", "label": "short label"}],
   "lists": [{"items": [{"atWord": 20, "text": "item"}]}],

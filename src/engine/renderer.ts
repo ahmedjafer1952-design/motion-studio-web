@@ -467,7 +467,9 @@ function drawTextWithFx(ctx: CanvasRenderingContext2D, p: TextLayerProps, localT
     // Right-to-left reveal (Arabic reading direction).
     const k = Math.max(0, localTime / p.wipeIn);
     const e = 1 - Math.pow(1 - k, 3);
-    const left = ox + textW / 2 + p.fontSize * 0.3 - (textW + p.fontSize * 0.6) * e;
+    // On the canvas the text spans [-ox - textW/2, -ox + textW/2] (ox shifts it for alignment).
+    const textRight = -ox + textW / 2;
+    const left = textRight + p.fontSize * 0.3 - (textW + p.fontSize * 0.6) * e;
     ctx.beginPath();
     ctx.rect(left, -bh, bw * 2, bh * 2);
     ctx.clip();
@@ -620,6 +622,65 @@ function drawCaption(ctx: CanvasRenderingContext2D, p: CaptionLayerProps, t: num
 
   if (p.style === "phraseStack") {
     drawPhraseStack(ctx, p, t);
+    return;
+  }
+
+  if (p.style === "minimal") {
+    // Editorial captions: a short sentence fragment in a regular weight, key words heavier and in
+    // the accent color, fading in as a phrase — no boxes, no pops, a soft shadow for legibility.
+    const phrase = groupCaptionWordsIntoLines(p.words, 0.45, 6).find((l) => t >= l[0].start - 0.05 && t <= l[l.length - 1].end + 0.35);
+    if (!phrase) return;
+    const age = t - phrase[0].start;
+    const fade = Math.min(1, Math.max(0, (age + 0.05) / 0.18));
+    const size = p.fontSize;
+    const fonts = phrase.map((w) => `${w.emphasis ? 800 : 500} ${size}px ${p.fontFamily}`);
+    const gap = size * 0.26;
+    const widths = phrase.map((w, i) => {
+      ctx.font = fonts[i];
+      return ctx.measureText(w.text).width;
+    });
+    // Keep the phrase inside the frame: two balanced lines when one would be too wide.
+    const m = ctx.getTransform();
+    const maxW = (ctx.canvas.width / Math.max(0.01, Math.hypot(m.a, m.b))) * 0.86;
+    const total = widths.reduce((a, b) => a + b, 0) + gap * (phrase.length - 1);
+    const rows: number[][] = [];
+    if (total > maxW && phrase.length > 1) {
+      let acc = 0;
+      let split = phrase.length - 1;
+      for (let i = 0; i < phrase.length; i++) {
+        acc += widths[i] + gap;
+        if (acc >= total / 2) {
+          split = Math.max(1, Math.min(phrase.length - 1, i + 1));
+          break;
+        }
+      }
+      rows.push([...Array(split).keys()], [...Array(phrase.length - split).keys()].map((k) => k + split));
+    } else {
+      rows.push([...phrase.keys()]);
+    }
+    ctx.save();
+    ctx.globalAlpha *= fade;
+    ctx.translate(0, (1 - fade) * size * 0.2);
+    ctx.textAlign = "right";
+    ctx.shadowColor = "rgba(0,0,0,0.55)";
+    ctx.shadowBlur = size * 0.25;
+    ctx.shadowOffsetY = size * 0.04;
+    rows.forEach((row, r) => {
+      const rowW = row.reduce((a, i) => a + widths[i], 0) + gap * (row.length - 1);
+      const scale = Math.min(1, maxW / rowW);
+      let x = rowW / 2;
+      const y = (r - (rows.length - 1) / 2) * size * 1.3;
+      ctx.save();
+      ctx.scale(scale, scale);
+      row.forEach((i) => {
+        ctx.font = fonts[i];
+        ctx.fillStyle = phrase[i].emphasis ? p.emphasisColor : p.color;
+        ctx.fillText(phrase[i].text, x, y / scale);
+        x -= widths[i] + gap;
+      });
+      ctx.restore();
+    });
+    ctx.restore();
     return;
   }
 

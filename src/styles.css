@@ -903,3 +903,6 @@ textarea {
   padding: 0 6px;
   line-height: 1.4;
 }
+.mode-cards.mode-cards-2 {
+  grid-template-columns: repeat(2, 1fr);
+}

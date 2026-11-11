@@ -12,6 +12,8 @@ export interface AiEditRequest {
   frame: { width: number; height: number };
   /** Brand color chosen by the creator ("" = let Claude pick). */
   brandColor?: string;
+  /** "editorial" = restrained modern pro look (default); "bold" = high-energy reels. */
+  style?: "editorial" | "bold";
 }
 
 /** Claude's edit decisions, referencing transcript words by index so timing stays exact. */

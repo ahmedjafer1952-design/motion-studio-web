@@ -257,6 +257,59 @@ function titleCardAt(comp: Composition, text: string, start: number, end: number
   return [...out, applyPresetToLayer(applyPresetToLayer(card, "popIn", comp), "fadeOut", comp)];
 }
 
+// --- Editorial (modern pro) look -------------------------------------------
+// What separates a human editor's work from a template: restraint and typography. Type is set
+// flush to one side (right, for Arabic) instead of centered; a small light "kicker" line sits over
+// one heavy word; serif numerals; thin rules; slow camera pushes with occasional hard jump-cut
+// punch-ins; light film grain; entrances that differ slightly in timing instead of a uniform pop.
+
+const KICKER_FONT = "'thmanyahsans', 'IBM Plex Sans Arabic', 'Cairo', sans-serif";
+const HEAVY_FONT = "'thmanyahsans', 'Alexandria', 'Cairo', sans-serif";
+const SERIF_FONT = "'thmanyahserifdisplay', 'Playfair Display', 'Amiri', serif";
+
+/** Deterministic small timing offset (0–90 ms) so entrances don't all fire in lockstep. */
+function humanize(seed: number): number {
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return (x - Math.floor(x)) * 0.09;
+}
+
+/** A thin accent rule that draws itself (right → left). */
+function ruleAt(comp: Composition, xRight: number, y: number, width: number, color: string, start: number, end: number, name: string): Layer {
+  const line = makeRect(comp, { width, height: Math.max(2, Math.round(comp.height * 0.0025)), color, x: xRight - width / 2, y, startTime: start, endTime: end, name });
+  line.transform.scale = {
+    static: { x: 1, y: 1 },
+    keyframes: [
+      { id: makeId("kf"), time: start, value: { x: 0.001, y: 1 }, easing: "easeOut" },
+      { id: makeId("kf"), time: start + 0.5, value: { x: 1, y: 1 }, easing: "easeOut" },
+    ],
+  };
+  // Grow from the right edge: shift so the right end stays put while it scales.
+  line.transform.position.keyframes = [
+    { id: makeId("kf"), time: start, value: { x: xRight, y }, easing: "easeOut" },
+    { id: makeId("kf"), time: start + 0.5, value: { x: xRight - width / 2, y }, easing: "easeOut" },
+  ];
+  return applyPresetToLayer(line, "fadeOut", comp);
+}
+
+/** Kicker (small, light) over a heavy main line, flush right — the editorial headline. */
+function editorialHeadline(comp: Composition, kicker: string, main: string, y: number, start: number, end: number, accent: string, name: string, seed: number): Layer[] {
+  const unit = Math.min(comp.width, comp.height);
+  const xr = comp.width * 0.9;
+  const maxW = comp.width * 0.8;
+  const mainSize = fitFont(main, Math.round(unit * 0.12), maxW);
+  const out: Layer[] = [];
+  const t0 = start + humanize(seed);
+  if (kicker) {
+    let k = makeText(comp, { content: kicker, fontSize: fitFont(kicker, Math.round(unit * 0.042), maxW), color: "rgba(255,255,255,0.78)", align: "right", x: xr, y: y - mainSize * 0.78, startTime: t0, endTime: end, name: `${name} Kicker`, fontFamily: KICKER_FONT });
+    out.push(applyPresetToLayer(applyPresetToLayer(k, "fadeUp", comp), "fadeOut", comp));
+  }
+  let m = makeText(comp, { content: main, fontSize: mainSize, color: "#ffffff", align: "right", x: xr, y, startTime: t0 + 0.12, endTime: end, name, fontFamily: HEAVY_FONT });
+  m.props = { ...(m.props as TextLayerProps), bold: true, wipeIn: 0.55 };
+  out.push(applyPresetToLayer(m, "fadeOut", comp));
+  out.push(ruleAt(comp, xr, y + mainSize * 0.72, Math.min(maxW, estTextWidth(main, mainSize) * 0.6), accent, t0 + 0.3, end, `${name} Rule`));
+  return out;
+}
+
 /** Tilted call-to-action in the top corner, like the "بالتعليقات" stamp in pro edits. */
 function ctaButtonAt(comp: Composition, text: string, start: number, end: number): Layer[] {
   const unit = Math.min(comp.width, comp.height);
@@ -278,6 +331,11 @@ function ctaButtonAt(comp: Composition, text: string, start: number, end: number
 
 export type KeyPhraseLook = "neon" | "box" | "glass" | "stretch";
 
+export type EditStyle = "editorial" | "bold";
+
+/** Cartoonish/game sounds a restrained editorial edit never uses. */
+const LOUD_SOUNDS = new Set(["bubble", "laser", "coin", "notification", "typewriterKey", "camera", "magic", "drop", "jingleSax", "success", "drumHit"]);
+
 export interface EditPlan {
   /** Transcript to caption — may carry corrected wording, same timings. */
   words: TranscribedWord[];
@@ -297,6 +355,8 @@ export interface EditPlan {
   backgroundLook?: VideoLook | null;
   /** Replace the real background with a studio backdrop lit in the brand color. */
   studioBackground?: boolean;
+  /** "editorial" = restrained modern pro look; "bold" = high-energy reels look. */
+  style?: EditStyle;
   zooms: { time: number; strength: "light" | "strong" }[];
   sounds: { sound: SoundId; time: number }[];
   colorGrade: ColorGradeId | null;
@@ -374,10 +434,38 @@ export function buildEditFromPlan(
     captions.transform.position.static = { x: comp.width / 2, y: comp.height * (vertical ? 0.62 : 0.72) };
     (captions.props as CaptionLayerProps).fontSize = Math.round(Math.min(comp.width, comp.height) * 0.085);
   }
+  if (plan.style === "editorial") {
+    // Editorial captions: small, low, regular weight — the speaker carries the frame, not the text.
+    const props = captions.props as CaptionLayerProps;
+    if (["bigWord", "pillWord", "buildUp", "phraseStack"].includes(props.style)) props.style = "minimal";
+    if (props.style === "minimal") {
+      props.fontSize = Math.round(Math.min(comp.width, comp.height) * 0.056);
+      props.fontFamily = "'thmanyahsans', 'IBM Plex Sans Arabic', 'Cairo', sans-serif";
+      props.emphasisColor = lighten(accent ?? "#e8c37b", 0.2);
+      captions.transform.position.static = { x: comp.width / 2, y: comp.height * (vertical ? 0.8 : 0.85) };
+    }
+    // A whisper of film grain over everything: footage stops looking "digital-clean".
+    const grain = createLayer("overlay", comp);
+    grain.name = "Auto Film Grain";
+    grain.startTime = sourceLayer.startTime;
+    grain.endTime = sourceLayer.endTime;
+    grain.props = { ...(grain.props as object), effect: "grain", intensity: 0.22, width: comp.width, height: comp.height } as Layer["props"];
+    newLayers.push(grain);
+  }
   newLayers.push(captions);
 
+  const editorial = plan.style === "editorial";
+  const accentE = accent ?? "#e8c37b";
   if (plan.title) {
-    newLayers.push(...titleCardAt(comp, plan.title, sourceLayer.startTime, Math.min(sourceLayer.startTime + 2.5, sourceLayer.endTime)));
+    const tEnd = Math.min(sourceLayer.startTime + 2.5, sourceLayer.endTime);
+    if (editorial) {
+      const words = plan.title.split(/\s+/).filter(Boolean);
+      const main = words.length > 2 ? words.slice(-2).join(" ") : plan.title;
+      const kicker = words.length > 2 ? words.slice(0, -2).join(" ") : "";
+      newLayers.push(...editorialHeadline(comp, kicker, main, comp.height * (vertical ? 0.24 : 0.3), sourceLayer.startTime, tEnd, accentE, "Auto Title", 1));
+    } else {
+      newLayers.push(...titleCardAt(comp, plan.title, sourceLayer.startTime, tEnd));
+    }
   }
 
   // Big-number callouts, upper area so they don't collide with captions at the bottom.
@@ -400,6 +488,21 @@ export function buildEditFromPlan(
     if (!inClip(t, 0.3)) return;
     const end = Math.min(t + 2.2, sourceLayer.endTime);
     if (!claim(t, end)) return;
+    if (editorial) {
+      // Serif numeral, flush right, with a light label and a rule.
+      const unit = Math.min(comp.width, comp.height);
+      const xr = comp.width * 0.9;
+      const y = comp.height * (vertical ? 0.3 : 0.35);
+      const size = fitFont(n.text, Math.round(unit * 0.26), comp.width * 0.75);
+      let num = makeText(comp, { content: n.text, fontSize: size, color: "#ffffff", align: "right", x: xr, y, startTime: t + humanize(idx + 7), endTime: end, name: `Auto Number ${idx + 1}`, fontFamily: SERIF_FONT });
+      newLayers.push(applyPresetToLayer(applyPresetToLayer(num, "fadeUp", comp), "fadeOut", comp));
+      if (n.label) {
+        let lab = makeText(comp, { content: n.label, fontSize: Math.round(unit * 0.045), color: "rgba(255,255,255,0.8)", align: "right", x: xr, y: y + size * 0.62, startTime: t + 0.2, endTime: end, name: `Auto Number Label ${idx + 1}`, fontFamily: KICKER_FONT });
+        newLayers.push(applyPresetToLayer(applyPresetToLayer(lab, "fadeUp", comp), "fadeOut", comp));
+      }
+      newLayers.push(ruleAt(comp, xr, y + size * 0.45, unit * 0.25, accentE, t + 0.25, end, `Auto Number Rule ${idx + 1}`));
+      return;
+    }
     // Huge hollow neon number in the top corner, like a lit sign.
     const x = vertical ? comp.width * 0.2 : comp.width * 0.78;
     const y = comp.height * (vertical ? 0.17 : 0.24);
@@ -417,6 +520,30 @@ export function buildEditFromPlan(
 
   // List items as frosted glass cards stacking in, each exactly when it's spoken.
   plan.lists.forEach((list, li) => {
+    if (editorial) {
+      // Numbered, flush-right list: accent numeral + item, a hairline under each.
+      const unit = Math.min(comp.width, comp.height);
+      const items = list.items.slice(0, 4);
+      const lastItem = items.length ? toCompTime(items[items.length - 1].time) : 0;
+      const end = Math.min(sourceLayer.endTime, lastItem + 2.5);
+      const xr = comp.width * 0.9;
+      const rowH = unit * 0.11;
+      const top = comp.height * (vertical ? 0.24 : 0.22);
+      items.forEach((item, ii) => {
+        const t = toCompTime(item.time) + humanize(li * 10 + ii);
+        if (!inClip(t)) return;
+        const y = top + ii * rowH;
+        const size = fitFont(item.text, Math.round(unit * 0.058), comp.width * 0.62);
+        let num = makeText(comp, { content: String(ii + 1).padStart(2, "0"), fontSize: Math.round(unit * 0.034), color: accentE, align: "right", x: xr, y, startTime: t, endTime: end, name: `Auto List Num ${li + 1}.${ii + 1}`, fontFamily: SERIF_FONT });
+        let txt = makeText(comp, { content: item.text, fontSize: size, color: "#ffffff", align: "right", x: xr - unit * 0.075, y, startTime: t + 0.06, endTime: end, name: `Auto List ${li + 1}.${ii + 1}`, fontFamily: HEAVY_FONT });
+        txt.props = { ...(txt.props as TextLayerProps), bold: true };
+        newLayers.push(applyPresetToLayer(applyPresetToLayer(num, "fadeIn", comp), "fadeOut", comp));
+        newLayers.push(applyPresetToLayer(applyPresetToLayer(txt, "fadeUp", comp), "fadeOut", comp));
+        let hair = makeRect(comp, { width: comp.width * 0.8, height: 1, color: "rgba(255,255,255,0.22)", x: xr - comp.width * 0.4, y: y + rowH * 0.48, startTime: t + 0.1, endTime: end, name: `Auto List Line ${li + 1}.${ii + 1}` });
+        newLayers.push(applyPresetToLayer(applyPresetToLayer(hair, "fadeIn", comp), "fadeOut", comp));
+      });
+      return;
+    }
     const unit = Math.min(comp.width, comp.height);
     const cardW = Math.min(comp.width * 0.82, unit * 0.8);
     const cardH = unit * 0.095;
@@ -465,6 +592,15 @@ export function buildEditFromPlan(
     const look = k.look ?? "neon";
     const color = accent ? lighten(accent, 0.45) : NEON;
     if (!claim(t, Math.min(t + 2.4, sourceLayer.endTime))) return;
+    if (editorial) {
+      // The [bracketed] word becomes the heavy line; the rest of the phrase is its kicker.
+      const m = /\[([^\]]+)\]/.exec(k.text);
+      const main = m ? m[1] : k.text;
+      const kicker = m ? k.text.replace(m[0], "").replace(/\s+/g, " ").trim() : "";
+      const y = comp.height * (vertical ? (idx % 2 ? 0.3 : 0.26) : 0.32);
+      newLayers.push(...editorialHeadline(comp, kicker, main, y, t, Math.min(t + 2.4, sourceLayer.endTime), accentE, `Auto Key Phrase ${idx + 1}`, idx + 3));
+      return;
+    }
     const text = look === "box" || look === "glass" ? k.text.replace(/[[\]]/g, "") : k.text;
     const desired = Math.round(unit * (look === "glass" ? 0.065 : look === "box" ? 0.075 : 0.11));
     let phrase = makeText(comp, {
@@ -489,7 +625,10 @@ export function buildEditFromPlan(
   });
 
   // Sound effects at their moments, each spanning only its own length.
-  plan.sounds.slice(0, 20).forEach((s, idx) => {
+  plan.sounds
+    .filter((s) => !editorial || !LOUD_SOUNDS.has(s.sound))
+    .slice(0, 20)
+    .forEach((s, idx) => {
     const t = toCompTime(s.time);
     if (!inClip(t)) return;
     const layer = createLayer("audio", comp);
@@ -503,7 +642,15 @@ export function buildEditFromPlan(
 
   if (plan.cta) {
     const ctaStart = Math.max(sourceLayer.startTime, sourceLayer.endTime - 2.5);
-    newLayers.push(...ctaButtonAt(comp, plan.cta, ctaStart, sourceLayer.endTime));
+    if (editorial) {
+      const unit = Math.min(comp.width, comp.height);
+      let c = makeText(comp, { content: plan.cta, fontSize: fitFont(plan.cta, Math.round(unit * 0.05), comp.width * 0.8), color: "#ffffff", x: comp.width / 2, y: comp.height * (vertical ? 0.9 : 0.88), startTime: ctaStart, endTime: sourceLayer.endTime, name: "Auto CTA", fontFamily: KICKER_FONT });
+      c.props = { ...(c.props as TextLayerProps), bold: true };
+      newLayers.push(applyPresetToLayer(c, "fadeUp", comp));
+      newLayers.push(ruleAt(comp, comp.width / 2 + unit * 0.06, comp.height * (vertical ? 0.87 : 0.84), unit * 0.12, accentE, ctaStart + 0.2, sourceLayer.endTime, "Auto CTA Rule"));
+    } else {
+      newLayers.push(...ctaButtonAt(comp, plan.cta, ctaStart, sourceLayer.endTime));
+    }
   }
 
   // Zoom "punches", applied directly to the source layer's own scale.
@@ -518,6 +665,26 @@ export function buildEditFromPlan(
       const t = toCompTime(z.time);
       if (t <= sourceLayer.startTime + 0.2 || t >= sourceLayer.endTime - 0.5 || t - lastZoom < 0.8) return;
       lastZoom = t;
+      if (editorial) {
+        if (z.strength === "strong") {
+          // Jump-cut punch-in: an instant cut to a tighter frame, held, then an instant cut back.
+          const k = 1.14;
+          const hold = Math.min(1.8, Math.max(0.6, sourceLayer.endTime - t - 0.3));
+          scaleKfs.push({ id: makeId("kf"), time: t - 0.01, value: baseScale, easing: "linear" });
+          scaleKfs.push({ id: makeId("kf"), time: t, value: { x: baseScale.x * k, y: baseScale.y * k }, easing: "linear" });
+          scaleKfs.push({ id: makeId("kf"), time: t + hold, value: { x: baseScale.x * k, y: baseScale.y * k }, easing: "linear" });
+          scaleKfs.push({ id: makeId("kf"), time: t + hold + 0.01, value: baseScale, easing: "linear" });
+          lastZoom = t + hold;
+        } else {
+          // Slow push-in, like a dolly: barely noticed, but it keeps the frame alive.
+          const dur = Math.min(3.2, Math.max(1, sourceLayer.endTime - t - 0.2));
+          scaleKfs.push({ id: makeId("kf"), time: t, value: baseScale, easing: "easeInOut" });
+          scaleKfs.push({ id: makeId("kf"), time: t + dur, value: { x: baseScale.x * 1.05, y: baseScale.y * 1.05 }, easing: "easeInOut" });
+          scaleKfs.push({ id: makeId("kf"), time: t + dur + 0.8, value: baseScale, easing: "easeInOut" });
+          lastZoom = t + dur + 0.8;
+        }
+        return;
+      }
       // Punch in and hold, the way editors cut to a closer shot, then ease back out.
       const k = z.strength === "strong" ? 1.18 : 1.08;
       const hold = Math.min(1.6, Math.max(0.5, sourceLayer.endTime - t - 0.4));

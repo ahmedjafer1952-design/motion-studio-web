@@ -75,6 +75,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
   const [includeCta, setIncludeCta] = useState(true);
   const [ctaText, setCtaText] = useState("");
   const [brandColor, setBrandColor] = useState(""); // "" = Claude picks
+  const [style, setStyle] = useState<"editorial" | "bold">("editorial");
   const [textBehind, setTextBehind] = useState(false);
   const [bgLook, setBgLook] = useState<"" | VideoLook | "studio">("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -141,6 +142,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
         cta: { enabled: includeCta, text: ctaText },
         frame: { width: comp.width, height: comp.height },
         brandColor: brandColor || undefined,
+        style,
       };
       if (mode === "chat") {
         setPrompt(buildManualPrompt(req));
@@ -190,6 +192,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
       ...plan,
       words: res.words,
       emphasis: res.emphasis,
+      style,
       textBehind: isVideo && textBehind,
       backgroundLook: isVideo && bgLook && bgLook !== "studio" ? bgLook : null,
       studioBackground: isVideo && bgLook === "studio",
@@ -367,6 +370,17 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
                 </div>
               </label>
             )}
+
+            <div className="mode-cards mode-cards-2">
+              <button type="button" className={`mode-card ${style === "editorial" ? "active" : ""}`} onClick={() => setStyle("editorial")}>
+                <span className="mode-card-title">🎬 حديث احترافي</span>
+                <span className="mode-card-desc">ستايل المونتيرين الحاليين: خطوط مرتبة على جنب، هدوء، زوم بطيء، حبيبات فيلم — ما يبين AI</span>
+              </button>
+              <button type="button" className={`mode-card ${style === "bold" ? "active" : ""}`} onClick={() => setStyle("bold")}>
+                <span className="mode-card-title">⚡ جريء ريلز</span>
+                <span className="mode-card-desc">نيون، كبسولات، أصوات أكثر — حماسي ولافت</span>
+              </button>
+            </div>
 
             <div className="field-row">
               <label className="field">

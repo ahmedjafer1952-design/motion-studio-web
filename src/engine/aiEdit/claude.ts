@@ -20,7 +20,7 @@ const ClaudeEditSchema = z.object({
   corrections: z.array(z.object({ index: wordIndex(), text: z.string() })),
   rewrites: z.array(z.object({ fromWord: wordIndex(), toWord: wordIndex(), text: z.string() })),
   emphasis: z.array(wordIndex()),
-  captionStyle: z.string().describe("One of: bigWord, karaokeLine, pillWord, emphasisOnly, buildUp, phraseStack, glassPill"),
+  captionStyle: z.string().describe("One of: bigWord, karaokeLine, pillWord, emphasisOnly, buildUp, phraseStack, glassPill, minimal"),
   title: z.string().nullable(),
   numbers: z.array(z.object({ atWord: wordIndex(), value: z.string(), label: z.string() })),
   lists: z.array(z.object({ items: z.array(z.object({ atWord: wordIndex(), text: z.string() })) })),
@@ -69,6 +69,7 @@ export function validateRequest(raw: unknown): AiEditRequest {
       width: Number(r.frame?.width) > 0 ? Number(r.frame?.width) : 1280,
       height: Number(r.frame?.height) > 0 ? Number(r.frame?.height) : 720,
     },
+    style: r.style === "bold" ? "bold" : "editorial",
     brandColor: typeof r.brandColor === "string" && /^#[0-9a-f]{6}$/i.test(r.brandColor) ? r.brandColor : undefined,
   };
 }

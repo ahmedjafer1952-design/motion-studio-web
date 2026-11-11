@@ -148,7 +148,7 @@ export interface AudioLayerProps {
   muted: boolean;
 }
 
-export type CaptionStyle = "bigWord" | "karaokeLine" | "pillWord" | "emphasisOnly" | "buildUp" | "phraseStack" | "glassPill";
+export type CaptionStyle = "bigWord" | "karaokeLine" | "pillWord" | "emphasisOnly" | "buildUp" | "phraseStack" | "glassPill" | "minimal";
 
 export interface CaptionWord {
   id: string;
