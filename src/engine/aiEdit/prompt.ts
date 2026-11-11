@@ -1,5 +1,5 @@
 import { COLOR_GRADES } from "../colorGrade";
-import { SOUND_LIBRARY } from "../sounds";
+import { PACK_SOUND_ALIASES, SOUND_LIBRARY } from "../sounds";
 import type { AiEditRequest } from "./types";
 
 export const EDIT_SYSTEM_PROMPT = `You are an experienced short-form video editor working for Arabic-speaking creators, many of whom speak Iraqi dialect. You receive a word-level speech transcript of a clip (machine transcribed, so it contains mistakes) and decide how to edit it inside a motion-graphics editor. Your decisions are applied automatically, so they must be precise.
@@ -35,7 +35,10 @@ House style — how professional Arabic short-form editors work, and what the cr
 
 All on-screen text (title, labels, list items, key phrases, CTA) must be in the speaker's language and dialect. Follow the creator's notes when they give any.`;
 
-const SOUND_IDS = SOUND_LIBRARY.map((s) => s.id).join(", ");
+const SOUND_IDS = [
+  ...SOUND_LIBRARY.map((s) => s.id),
+  ...Object.entries(PACK_SOUND_ALIASES).map(([id, a]) => `${id} (${a.use})`),
+].join(", ");
 const GRADE_IDS = COLOR_GRADES.map((g) => `${g.id} (${g.description})`).join("; ");
 
 function wish(label: string, wanted: { enabled: boolean; text: string }): string {

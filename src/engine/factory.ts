@@ -70,6 +70,7 @@ export function defaultProps(type: LayerType): Layer["props"] {
         blur: 18,
         tint: "rgba(255,255,255,0.10)",
         borderColor: "rgba(255,255,255,0.28)",
+        style: "liquid",
       };
     case "overlay":
       return { effect: "grain", intensity: 0.5, width: 1280, height: 720 } as OverlayLayerProps;

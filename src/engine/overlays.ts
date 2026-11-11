@@ -10,6 +10,7 @@ export const OVERLAY_LIBRARY: OverlayDef[] = [
   { id: "grain", label: "حبيبات فيلم", description: "تشويش ناعم متحرك — لمسة سينمائية خام" },
   { id: "vhs", label: "VHS", description: "حبيبات + خطوط مسح + انزياح لوني — لوك شريط قديم" },
   { id: "vignette", label: "تظليل الحواف", description: "تعتيم تدريجي حول حواف الكادر" },
+  { id: "lightLeak", label: "تسريب ضوء", description: "بقع ضوء دافئة تتحرك بهدوء — لوك فيلم سينمائي" },
   { id: "letterbox", label: "أشرطة سينمائية", description: "شريطين أسود فوق وجوه — لقطة سينمائية عريضة" },
   { id: "scanlines", label: "خطوط مسح", description: "خطوط أفقية شفافة — لوك شاشة قديمة" },
 ];

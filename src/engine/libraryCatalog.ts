@@ -1,3 +1,4 @@
+import { SOUND_PACK_GROUPS, SOUND_PACK_NAMES } from "./soundPacks";
 import type { CaptionStyle, ColorGradeId, LayerType, OverlayEffect } from "../types";
 import { MOTION_TEMPLATES, type TemplateId } from "./templates";
 import { FACELESS_SCENES, type SceneId } from "./scenes";
@@ -93,6 +94,17 @@ export interface SoundCard {
   description: string;
 }
 
+/** A group of recorded variants from a bundled CC0 sound pack (e.g. "heavy punch" × 5). */
+export interface SoundPackCard {
+  kind: "soundPack";
+  id: string;
+  pack: string;
+  packName: string;
+  label: string;
+  description: string;
+  variants: { id: string; duration: number }[];
+}
+
 export interface StickerCard {
   kind: "sticker";
   id: StickerId;
@@ -115,6 +127,7 @@ export type LibraryCard =
   | AutoEditCard
   | GradeCard
   | SoundCard
+  | SoundPackCard
   | StickerCard
   | OverlayCard;
 
@@ -132,6 +145,16 @@ export const SOUND_CARDS: SoundCard[] = SOUND_LIBRARY.map((s) => ({
   id: s.id,
   label: s.label,
   description: s.description,
+}));
+
+export const SOUND_PACK_CARDS: SoundPackCard[] = SOUND_PACK_GROUPS.map((g) => ({
+  kind: "soundPack",
+  id: `${g.pack}/${g.group}`,
+  pack: g.pack,
+  packName: SOUND_PACK_NAMES[g.pack] ?? g.pack,
+  label: g.label,
+  description: g.description,
+  variants: g.variants,
 }));
 
 export const STICKER_CARDS: StickerCard[] = STICKERS.map((s) => ({
@@ -267,7 +290,7 @@ export function cardsForCategory(category: LibraryCategoryId): LibraryCard[] {
     case "grade":
       return GRADE_CARDS;
     case "sound":
-      return SOUND_CARDS;
+      return [...SOUND_CARDS, ...SOUND_PACK_CARDS];
     case "autoedit":
       return [AUTOEDIT_CARD];
   }

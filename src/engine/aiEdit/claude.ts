@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { COLOR_GRADES } from "../colorGrade";
-import { SOUND_LIBRARY } from "../sounds";
+import { PACK_SOUND_ALIASES, SOUND_LIBRARY } from "../sounds";
 import { EDIT_SYSTEM_PROMPT, buildEditUserMessage } from "./prompt";
 import type { AiEditRequest, ClaudeEditOutput } from "./types";
 
@@ -12,7 +12,7 @@ import type { AiEditRequest, ClaudeEditOutput } from "./types";
 // Enum-like fields are plain strings described with their allowed values: the SDK's schema
 // transform doesn't carry `enum` through, and one off-list value shouldn't sink a whole edit.
 // planFromClaude() drops or defaults anything unrecognized.
-const soundList = SOUND_LIBRARY.map((s) => s.id).join(", ");
+const soundList = [...SOUND_LIBRARY.map((s) => s.id), ...Object.keys(PACK_SOUND_ALIASES)].join(", ");
 const gradeList = COLOR_GRADES.map((g) => g.id).join(", ");
 const wordIndex = () => z.number().int().describe("Index of a word in the transcript");
 

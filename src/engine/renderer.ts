@@ -21,6 +21,7 @@ import type {
 import { evaluateTransform } from "./evaluate";
 import { drawChart } from "./chart";
 import { getPersonMask } from "./segmentation";
+import { drawLiquidGlass, drawLiquidGlassLocal } from "./liquidGlass";
 import { getColorGrade } from "./colorGrade";
 import { resolveMediaUrl } from "./mediaStore";
 
@@ -416,7 +417,81 @@ function drawStaggeredWords(ctx: CanvasRenderingContext2D, p: TextLayerProps, co
   });
 }
 
+let fxBuffer: HTMLCanvasElement | null = null;
+
+/**
+ * Text effects that need the letters isolated (light sweep, RGB split, wipe reveal): the text is
+ * drawn into its own buffer, treated there, then composited — so nothing beneath is affected.
+ */
+function drawTextWithFx(ctx: CanvasRenderingContext2D, p: TextLayerProps, localTime: number) {
+  const plain = { ...p, shine: undefined, rgbSplit: undefined, wipeIn: undefined };
+  ctx.font = `${p.bold ? "bold " : ""}${p.fontSize}px ${p.fontFamily}`;
+  const textW = ctx.measureText(p.content.replace(/[[\]]/g, "")).width;
+  const pad = p.fontSize * 1.2 + (p.rgbSplit ?? 0) * 2;
+  const bw = Math.ceil(textW + pad * 2 + (p.stretchIn ? p.fontSize * 4 : 0));
+  const bh = Math.ceil(p.fontSize * 2.4 + pad);
+  const m = ctx.getTransform();
+  const scale = Math.min(2, Math.max(1, Math.hypot(m.a, m.b)));
+  if (!fxBuffer) fxBuffer = document.createElement("canvas");
+  fxBuffer.width = Math.min(4096, Math.ceil(bw * scale));
+  fxBuffer.height = Math.min(4096, Math.ceil(bh * scale));
+  const b = fxBuffer.getContext("2d");
+  if (!b) return;
+  b.setTransform(scale, 0, 0, scale, (bw * scale) / 2, (bh * scale) / 2);
+  const ox = p.align === "left" ? -textW / 2 : p.align === "right" ? textW / 2 : 0;
+  b.translate(ox, 0);
+  drawText(b, plain, localTime);
+  b.setTransform(1, 0, 0, 1, 0, 0);
+
+  if (p.shine) {
+    // A soft diagonal band sweeps across every ~2.6 s.
+    const period = 2.6;
+    const k = (((localTime % period) + period) % period) / period;
+    const W = fxBuffer.width;
+    const H = fxBuffer.height;
+    const cx = -W * 0.3 + k * W * 1.6;
+    const g = b.createLinearGradient(cx - W * 0.12, 0, cx + W * 0.12, H * 0.4);
+    g.addColorStop(0, "rgba(255,255,255,0)");
+    g.addColorStop(0.5, "rgba(255,255,255,0.85)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    b.globalCompositeOperation = "source-atop";
+    b.fillStyle = g;
+    b.fillRect(0, 0, W, H);
+    b.globalCompositeOperation = "source-over";
+  }
+
+  const dx = -bw / 2 - ox;
+  const dy = -bh / 2;
+  ctx.save();
+  if (p.wipeIn && p.wipeIn > 0 && localTime < p.wipeIn) {
+    // Right-to-left reveal (Arabic reading direction).
+    const k = Math.max(0, localTime / p.wipeIn);
+    const e = 1 - Math.pow(1 - k, 3);
+    const left = ox + textW / 2 + p.fontSize * 0.3 - (textW + p.fontSize * 0.6) * e;
+    ctx.beginPath();
+    ctx.rect(left, -bh, bw * 2, bh * 2);
+    ctx.clip();
+  }
+  if (p.rgbSplit && p.rgbSplit > 0) {
+    const d = p.rgbSplit;
+    ctx.save();
+    ctx.globalAlpha *= 0.85;
+    ctx.globalCompositeOperation = "screen";
+    ctx.filter = "sepia(1) saturate(8) hue-rotate(-50deg)"; // red ghost
+    ctx.drawImage(fxBuffer, dx - d, dy, bw, bh);
+    ctx.filter = "sepia(1) saturate(8) hue-rotate(140deg)"; // cyan ghost
+    ctx.drawImage(fxBuffer, dx + d, dy, bw, bh);
+    ctx.restore();
+  }
+  ctx.drawImage(fxBuffer, dx, dy, bw, bh);
+  ctx.restore();
+}
+
 function drawText(ctx: CanvasRenderingContext2D, p: TextLayerProps, localTime: number) {
+  if ((p.shine || p.rgbSplit || p.wipeIn) && p.countTo == null) {
+    drawTextWithFx(ctx, p, localTime);
+    return;
+  }
   ctx.font = `${p.bold ? "bold " : ""}${p.fontSize}px ${p.fontFamily}`;
   ctx.textBaseline = "middle";
   if (p.glow) {
@@ -678,7 +753,9 @@ function drawLabelBox(ctx: CanvasRenderingContext2D, box: string, x: number, y: 
   ctx.shadowColor = "transparent";
   ctx.beginPath();
   ctx.roundRect(x, y, w, h, r);
-  if (box === "glass") {
+  if (box === "glass" && drawLiquidGlassLocal(ctx, x, y, w, h, r, { blur: 8, bezel: h * 0.32, refraction: h * 0.22, tint: "rgba(255,255,255,0.08)" })) {
+    // liquid glass drawn (device space) — nothing else to add
+  } else if (box === "glass") {
     frostCurrentPath(ctx, 14);
     const g = ctx.createLinearGradient(0, y, 0, y + h);
     g.addColorStop(0, "rgba(255,255,255,0.22)");
@@ -957,6 +1034,16 @@ function drawGlassPanel(ctx: CanvasRenderingContext2D, layer: Layer, time: numbe
   const x = t.position.x - w / 2;
   const y = t.position.y - h / 2;
 
+  if (p.style === "liquid") {
+    drawLiquidGlass(ctx, x, y, w, h, {
+      radius: Math.min(p.radius, w / 2, h / 2),
+      blur: Math.max(2, p.blur * 0.45),
+      tint: p.tint,
+      opacity: Math.max(0, Math.min(1, t.opacity)),
+    });
+    return;
+  }
+
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, t.opacity));
   ctx.beginPath();
@@ -990,6 +1077,27 @@ function drawOverlayEffect(ctx: CanvasRenderingContext2D, p: OverlayLayerProps) 
     grad.addColorStop(1, `rgba(0,0,0,${0.7 * p.intensity})`);
     ctx.fillStyle = grad;
     ctx.fillRect(-w / 2, -h / 2, w, h);
+  }
+
+  if (p.effect === "lightLeak") {
+    // Warm blobs drifting slowly, added with "screen" like light hitting the lens.
+    const tt = performance.now() / 1000;
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    const blobs: [number, number, number, string][] = [
+      [-0.35 + 0.15 * Math.sin(tt * 0.35), -0.3 + 0.1 * Math.cos(tt * 0.27), 0.75, "255,140,60"],
+      [0.4 + 0.12 * Math.cos(tt * 0.31), 0.25 + 0.12 * Math.sin(tt * 0.23), 0.6, "255,70,110"],
+      [0.1 * Math.sin(tt * 0.19), 0.45 + 0.08 * Math.cos(tt * 0.41), 0.5, "255,210,120"],
+    ];
+    for (const [bx, by, br, rgb] of blobs) {
+      const R = Math.max(w, h) * br;
+      const g = ctx.createRadialGradient(bx * w, by * h, 0, bx * w, by * h, R);
+      g.addColorStop(0, `rgba(${rgb},${0.55 * p.intensity})`);
+      g.addColorStop(1, `rgba(${rgb},0)`);
+      ctx.fillStyle = g;
+      ctx.fillRect(-w / 2, -h / 2, w, h);
+    }
+    ctx.restore();
   }
 
   if (p.effect === "letterbox") {

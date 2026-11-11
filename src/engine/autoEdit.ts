@@ -1,5 +1,5 @@
 import type { VideoLayerProps, VideoLook, GlassLayerProps, CaptionLayerProps, CaptionStyle, CaptionWord, ColorGradeId, Composition, Layer, TextLayerProps } from "../types";
-import type { SoundId } from "./sounds";
+import { soundSrcId, type SoundId } from "./sounds";
 import { createLayer } from "./factory";
 import { makeRect, makeText } from "./builders";
 import { applyPresetToLayer } from "./presets";
@@ -246,11 +246,12 @@ function titleCardAt(comp: Composition, text: string, start: number, end: number
     blur: 22,
     tint: "rgba(255,255,255,0.10)",
     borderColor: "rgba(255,255,255,0.45)",
+    style: "liquid",
   } as GlassLayerProps;
   const out: Layer[] = [];
   lines.forEach((line, i) => {
     let t = makeText(comp, { content: line, fontSize, color: "#ffffff", x: cx, y: cy + (i - (lines.length - 1) / 2) * fontSize * 1.25, startTime: start, endTime: end, name: `Auto Title ${i + 1}`, fontFamily: DISPLAY_FONT });
-    t.props = { ...(t.props as TextLayerProps), bold: true };
+    t.props = { ...(t.props as TextLayerProps), bold: true, shine: true };
     out.push(applyPresetToLayer(applyPresetToLayer(t, "fadeUp", comp), "fadeOut", comp));
   });
   return [...out, applyPresetToLayer(applyPresetToLayer(card, "popIn", comp), "fadeOut", comp)];
@@ -435,7 +436,7 @@ export function buildEditFromPlan(
       card.startTime = t;
       card.endTime = end;
       card.transform.position.static = { x: comp.width / 2, y };
-      card.props = { width: cardW, height: cardH, radius: cardH * 0.3, blur: 18, tint: hexToRgba(accent ?? "#14b8a6", 0.3), borderColor: "rgba(255,255,255,0.6)" } as GlassLayerProps;
+      card.props = { width: cardW, height: cardH, radius: cardH * 0.3, blur: 18, tint: hexToRgba(accent ?? "#14b8a6", 0.3), borderColor: "rgba(255,255,255,0.6)", style: "liquid" } as GlassLayerProps;
       let entry = makeText(comp, {
         content: item.text,
         fontSize: fitFont(item.text, Math.round(cardH * 0.4), cardW - cardH * 1.4),
@@ -479,7 +480,7 @@ export function buildEditFromPlan(
     });
     const props = phrase.props as TextLayerProps;
     if (look === "neon") phrase.props = { ...props, glow: color, emphasisColor: "#ffffff" };
-    else if (look === "box") phrase.props = { ...props, box: accent ?? "#6d28d9" };
+    else if (look === "box") phrase.props = { ...props, box: accent ?? "#6d28d9", wipeIn: 0.45 };
     else if (look === "glass") phrase.props = { ...props, box: "glass", emphasisColor: color };
     else phrase.props = { ...props, stretchIn: 0.8, emphasisColor: color };
     const entrance = look === "box" ? "slideInRight" : look === "glass" ? "springIn" : look === "stretch" ? "fadeIn" : "popIn";
@@ -495,7 +496,8 @@ export function buildEditFromPlan(
     layer.name = `Auto Sound ${idx + 1} (${s.sound})`;
     layer.startTime = t;
     layer.endTime = Math.min(t + 1.3, Math.max(sourceLayer.endTime, t + 0.2));
-    layer.props = { src: `sound:${s.sound}`, fileName: `${s.sound}.wav`, trimIn: 0, naturalDuration: 1.3, muted: false };
+    const srcId = soundSrcId(s.sound);
+    layer.props = { src: `sound:${srcId}`, fileName: `${s.sound}${srcId.startsWith("pack:") ? ".mp3" : ".wav"}`, trimIn: 0, naturalDuration: 1.3, muted: false };
     newLayers.push(layer);
   });
 

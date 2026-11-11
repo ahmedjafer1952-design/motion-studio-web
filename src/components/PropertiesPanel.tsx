@@ -491,6 +491,20 @@ function TextFields({ props: p, onChange }: { props: TextLayerProps; onChange: (
               <span>Outline only</span>
             </label>
           </div>
+          <div className="field-row">
+            <label className="field field-checkbox">
+              <input type="checkbox" checked={!!p.shine} onChange={(e) => onChange({ shine: e.target.checked || undefined })} />
+              <span>✨ لمعة تمشي (Light sweep)</span>
+            </label>
+            <label className="field">
+              <span>فصل ألوان RGB (px)</span>
+              <NumInput min={0} max={20} value={p.rgbSplit ?? 0} onChange={(e) => onChange({ rgbSplit: Math.max(0, parseFloat(e.target.value) || 0) || undefined })} />
+            </label>
+            <label className="field">
+              <span>كشف بالمسح (ث)</span>
+              <NumInput min={0} step={0.1} value={p.wipeIn ?? 0} onChange={(e) => onChange({ wipeIn: Math.max(0, parseFloat(e.target.value) || 0) || undefined })} />
+            </label>
+          </div>
           <label className="field">
             <span>Label box behind text</span>
             <select value={p.box ? (p.box === "glass" ? "glass" : "color") : ""} onChange={(e) => onChange({ box: e.target.value === "glass" ? "glass" : e.target.value === "color" ? "#6d28d9" : undefined })}>
@@ -1033,6 +1047,13 @@ function CaptionFields({
 function GlassFields({ props: p, onChange }: { props: GlassLayerProps; onChange: (p: Partial<GlassLayerProps>) => void }) {
   return (
     <>
+      <label className="field">
+        <span>نوع الزجاج</span>
+        <select value={p.style ?? "frost"} onChange={(e) => onChange({ style: e.target.value as GlassLayerProps["style"] })}>
+          <option value="liquid">زجاج سائل (حواف تكسر الضوء + لمعة) — Liquid Glass</option>
+          <option value="frost">زجاج مثلّج مسطح — Frosted</option>
+        </select>
+      </label>
       <div className="field-row">
         <label className="field">
           <span>Width</span>

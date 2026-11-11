@@ -470,7 +470,7 @@ function infoCards(comp: Composition): Layer[] {
     card.name = `Info Card ${i + 1}`;
     card.startTime = start;
     card.transform.position.static = { x: cx, y };
-    card.props = { width: cardW, height: cardH, radius: cardH * 0.28, blur: 18, tint: "rgba(20,184,166,0.28)", borderColor: "rgba(160,255,240,0.7)" };
+    card.props = { width: cardW, height: cardH, radius: cardH * 0.28, blur: 18, tint: "rgba(20,184,166,0.28)", borderColor: "rgba(160,255,240,0.7)", style: "liquid" };
     let icon = makeText(comp, { content: it.icon, fontSize: Math.round(cardH * 0.45), color: "#ffffff", x: cx - cardW / 2 + cardH * 0.55, y, startTime: start, name: `Info Icon ${i + 1}` });
     let title = makeText(comp, { content: it.title, fontSize: Math.round(cardH * 0.28), color: "#ffffff", align: "right", x: cx + cardW / 2 - cardH * 0.3, y: y - cardH * 0.14, startTime: start, name: `Info Title ${i + 1}`, fontFamily: DISPLAY });
     title.props = { ...(title.props as TextLayerProps), bold: true };

@@ -239,12 +239,40 @@ function encodeWav(buffer: AudioBuffer): Blob {
 
 const urlCache = new Map<SoundId, Promise<string>>();
 
+/**
+ * Named picks from the recorded CC0 packs that Auto Edit may choose alongside the synthesized
+ * sounds — real recordings for the moments that matter most.
+ */
+export const PACK_SOUND_ALIASES: Record<string, { file: string; use: string }> = {
+  punch: { file: "impact/impact_punch_heavy_000", use: "heavy punch — a hard-hitting punchline or reveal" },
+  softThud: { file: "impact/impact_soft_medium_000", use: "soft thud — a card or box landing" },
+  glassTap: { file: "impact/impact_glass_light_000", use: "light glass tap — a glass pill/card appearing" },
+  glassHit: { file: "impact/impact_glass_heavy_000", use: "glass crash — shock, broken expectation" },
+  bell: { file: "impact/impact_bell_heavy_000", use: "deep bell — an important fact or ending" },
+  powerUp: { file: "digital/power_up_1", use: "power-up — improvement, upgrade, success" },
+  uiConfirm: { file: "ui/confirmation_001", use: "UI confirm — a tick/check item" },
+  uiGlass: { file: "ui/glass_001", use: "tiny glass chime — subtle highlight" },
+  jingleHit: { file: "jingles/jingles_hit_0", use: "short energetic musical sting — intro/outro" },
+  jingleSax: { file: "jingles/jingles_sax_0", use: "short jazzy sting — playful ending" },
+};
+
+/** The `sound:` id to store on a layer for a built-in id, a pack alias, or a full pack id. */
+export function soundSrcId(id: string): string {
+  const alias = PACK_SOUND_ALIASES[id];
+  return alias ? `pack:${alias.file}` : id;
+}
+
+/** A recorded sound from the bundled CC0 packs: "pack:<pack>/<file>" → public/sounds/<pack>/<file>.mp3. */
+export type PackSoundId = `pack:${string}`;
+
 /** Synthesizes (once, cached) and returns an object URL for the given UI sound — usable directly as an audio layer's src. */
-export function getSoundUrl(id: SoundId): Promise<string> {
-  let cached = urlCache.get(id);
+export function getSoundUrl(id: SoundId | PackSoundId): Promise<string> {
+  if (id.startsWith("pack:")) return Promise.resolve(`${import.meta.env.BASE_URL}sounds/${id.slice(5)}.mp3`);
+  const builtin = id as SoundId;
+  let cached = urlCache.get(builtin);
   if (!cached) {
-    cached = synthesize(id).then((buf) => URL.createObjectURL(encodeWav(buf)));
-    urlCache.set(id, cached);
+    cached = synthesize(builtin).then((buf) => URL.createObjectURL(encodeWav(buf)));
+    urlCache.set(builtin, cached);
   }
   return cached;
 }

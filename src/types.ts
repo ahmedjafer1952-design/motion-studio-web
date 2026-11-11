@@ -54,6 +54,9 @@ export interface TextLayerProps {
   glow?: string; // neon glow color around the text
   outline?: boolean; // draw only the letter outlines (big hollow numbers)
   wordStagger?: number; // seconds between words springing in one after another (0/undefined = off)
+  shine?: boolean; // a diagonal light sweep runs across the letters (premium/metallic)
+  rgbSplit?: number; // px of red/cyan channel separation (glitch / chromatic aberration)
+  wipeIn?: number; // seconds for a right-to-left wipe reveal (mask reveal)
   box?: string; // label box behind the text: a color, or "glass" for a frosted pill
   highlightBar?: string; // color of a marker bar that wipes in behind the text
   stretchIn?: number; // seconds of Arabic kashida "stretch" that shrinks back as the text appears
@@ -174,6 +177,7 @@ export interface GlassLayerProps {
   blur: number; // px
   tint: string; // rgba() overlay color on top of the blurred sample
   borderColor: string;
+  style?: "frost" | "liquid"; // liquid = refracting curved rim + specular highlight (Apple-style)
 }
 
 export type ChartKind = "bar" | "donut" | "progress" | "line";
@@ -192,7 +196,7 @@ export interface ChartLayerProps {
   height: number;
 }
 
-export type OverlayEffect = "grain" | "vhs" | "vignette" | "scanlines" | "letterbox";
+export type OverlayEffect = "grain" | "vhs" | "vignette" | "scanlines" | "letterbox" | "lightLeak";
 
 export interface OverlayLayerProps {
   effect: OverlayEffect;

@@ -559,6 +559,7 @@ textarea {
 }
 
 .sound-preview {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -881,4 +882,24 @@ textarea {
   display: block;
   font-size: 12px;
   margin-bottom: 4px;
+}
+.library-section-title {
+  grid-column: 1 / -1;
+  font-weight: 700;
+  margin: 10px 0 2px;
+  color: #fff;
+}
+.sound-variants {
+  position: absolute;
+  bottom: 4px;
+  inset-inline: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.sound-variants button {
+  padding: 0 6px;
+  line-height: 1.4;
 }

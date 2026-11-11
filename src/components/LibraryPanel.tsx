@@ -1,6 +1,6 @@
-import { useState, type MouseEvent } from "react";
+import { Fragment, useState, type MouseEvent } from "react";
 import { useEditorStore } from "../state/store";
-import { LIBRARY_CATEGORIES, cardsForCategory, type LibraryCategoryId } from "../engine/libraryCatalog";
+import { LIBRARY_CATEGORIES, cardsForCategory, type LibraryCategoryId, type SoundPackCard } from "../engine/libraryCatalog";
 import type { TemplateId } from "../engine/templates";
 import type { SceneId } from "../engine/scenes";
 import {
@@ -38,7 +38,7 @@ export function LibraryPanel({
     setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 350);
   };
 
-  const insertSound = async (id: Parameters<typeof getSoundUrl>[0]) => {
+  const insertSound = async (id: Parameters<typeof getSoundUrl>[0], flashKey: string = id) => {
     const buffer = await getSoundUrl(id);
     const naturalDuration = await new Promise<number>((resolve) => {
       const probe = new Audio(buffer);
@@ -47,10 +47,10 @@ export function LibraryPanel({
     });
     addLayerWithProps(
       "audio",
-      { src: `sound:${id}`, fileName: `${id}.wav`, trimIn: 0, naturalDuration, muted: false },
+      { src: `sound:${id}`, fileName: id.startsWith("pack:") ? `${id.split("/").pop()}.mp3` : `${id}.wav`, trimIn: 0, naturalDuration, muted: false },
       naturalDuration
     );
-    flash(id);
+    flash(flashKey);
   };
 
   const previewSound = async (id: Parameters<typeof getSoundUrl>[0], e: MouseEvent) => {
@@ -78,7 +78,17 @@ export function LibraryPanel({
           </div>
 
           <div className="library-grid">
-            {cards.map((card) => {
+            {cards.map((card, i) => {
+              if (card.kind === "soundPack") {
+                const prev = cards[i - 1];
+                const newPack = !prev || prev.kind !== "soundPack" || prev.pack !== card.pack;
+                return (
+                  <Fragment key={card.id}>
+                    {newPack && <div className="library-section-title">🎧 {card.packName}</div>}
+                    <SoundPackCardView card={card} flashing={flashId === card.id} onInsert={(id) => insertSound(id as Parameters<typeof getSoundUrl>[0], card.id)} />
+                  </Fragment>
+                );
+              }
               if (card.kind === "template") {
                 return (
                   <button
@@ -288,6 +298,39 @@ export function LibraryPanel({
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** One card per sound type; ‹ › steps through its recorded variants, ▶ previews, click adds it. */
+function SoundPackCardView({ card, flashing, onInsert }: { card: SoundPackCard; flashing: boolean; onInsert: (id: string) => void }) {
+  const [v, setV] = useState(0);
+  const id = `pack:${card.variants[v].id}`;
+  const play = (e: MouseEvent) => {
+    e.stopPropagation();
+    getSoundUrl(id as `pack:${string}`).then((url) => new Audio(url).play().catch(() => {}));
+  };
+  const step = (e: MouseEvent, d: number) => {
+    e.stopPropagation();
+    setV((x) => (x + d + card.variants.length) % card.variants.length);
+  };
+  return (
+    <div role="button" tabIndex={0} className={`library-card ${flashing ? "flash" : ""}`} onClick={() => onInsert(id)} onKeyDown={(e) => e.key === "Enter" && onInsert(id)}>
+      <div className="library-card-preview sound-preview">
+        <span className="sound-icon">🎧</span>
+        <button type="button" className="sound-play-btn" title="معاينة الصوت" onClick={play}>
+          ▶
+        </button>
+        {card.variants.length > 1 && (
+          <span className="sound-variants">
+            <button type="button" onClick={(e) => step(e, -1)}>‹</button>
+            {v + 1}/{card.variants.length}
+            <button type="button" onClick={(e) => step(e, 1)}>›</button>
+          </span>
+        )}
+      </div>
+      <div className="library-card-label">{card.label}</div>
+      <div className="library-card-desc">{card.description}</div>
     </div>
   );
 }
