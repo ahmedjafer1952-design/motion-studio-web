@@ -131,3 +131,44 @@ npm run dev
 - `src/engine/renderer.ts` الرسم، `autoEdit.ts` (EditPlan → طبقات + جدولة اللحظات)، `aiEdit/` (prompt، schema، manual paste، client)، `segmentation.ts` (MediaPipe محلي + تنعيم الحواف)، `captionReview.ts`، `customFonts.ts`، `chart.ts`.
 - الموديلات بـ `public/models/` (Apache-2.0). لا ترفع خطوط مرخّصة للريبو.
 - قبل أي push: `npx tsc -b && npx vitest run && npm run build`.
+
+---
+
+## ٥. قاموس المؤثرات (الاسم الاحترافي ← وين موجود بالبرنامج)
+| الاسم بالإنكليزي | بالعراقي | بالبرنامج |
+|---|---|---|
+| Kinetic typography | نص متحرك | word-by-word، phraseStack، Word Reveal |
+| Liquid glass / Glassmorphism | زجاج سائل / زجاج مثلّج | طبقة Glass (نوع: زجاج سائل)، label box زجاج، كابشن glassPill |
+| Text behind subject / Depth text | كتابة ورا الشخص | 👤 كتابة ورا الشخص (Person cutout) |
+| Background removal / Keying | فصل الخلفية | 🎨 تغيير الخلفية |
+| Light sweep / Shine | لمعة تمشي | ✨ لمعة تمشي (نص) |
+| Chromatic aberration / RGB split | فصل ألوان | فصل ألوان RGB (نص) |
+| Mask reveal / Wipe | كشف بالمسح | كشف بالمسح (نص) |
+| Kashida stretch | تمطيط الحروف | Letter stretch |
+| Neon glow | نيون | Neon glow |
+| Highlighter / Marker | قلم فلوماستر | Highlight bar |
+| Light leaks | تسريب ضوء | Overlay: تسريب ضوء |
+| Film grain / VHS / Letterbox | حبيبات / شريط قديم / أشرطة سينمائية | Overlay |
+| Zoom punch / Punch-in | زوم مفاجئ | Zoom Punch، زوم الـ Auto Edit |
+| Whip pan | سحبة كاميرا | Whip Pan ←/→ |
+| Glitch | قلتش | Glitch Cut + فصل ألوان |
+| Camera shake | هزة | Shake |
+| Spring / Overshoot | زنبرك | easing spring، Spring In |
+| Lower third | شريط الاسم | Lower Third |
+| Data viz | رسوم بيانية | Chart |
+| B-roll / Cutaway | لقطة تغطية | broll بالـ Auto Edit + fadeBottom |
+| Color grade / LUT | تلوين سينمائي | 11 لوك |
+| Split screen | شاشة مقسومة | صورة بالنص الفوقاني + Fade bottom edge |
+
+## ٦. احتراف الزجاج (الوصفة)
+- **الزجاج السائل** = زجاج سميك محدّب: الحافة تكسر الضوء (الخلفية تنحني قرب الحافة) + فصل ألوان خفيف بالحافة + لمعة على الحافة من فوق-يسار + لمعة خفيفة فوق وظل داخلي تحت + ضبابية قليلة (2–8px) + تشبّع أعلى (1.3).
+- **متى تستخدمه:** كروت معلومات، كبسولة كابشن، عنوان، أرقام — **فوق خلفية بيها تفاصيل وألوان** (فيديو، صورة). فوق لون سادة ما يبين.
+- **التوازن:** انحناء زايد = طين؛ لمعة قليلة = بلاستك مضبّب. الافتراضي متوازن.
+- **لون الهوية:** tint خفيف (alpha 0.1–0.3) بلون الهوية، مو أكثر.
+- **الحجم:** الحافة ≈ 22% من أصغر بُعد. الكبسولات: radius = نص الارتفاع.
+- **الصوت المناسب:** glassTap أو uiGlass ويا ظهور الزجاج.
+- **الحركة:** Spring In أو Fade Up — الزجاج "يطفو" ما "ينزلق".
+
+## ٧. مكتبات الأصوات المسجّلة (CC0 من Kenney — مسموح بيعها ويا البرنامج)
+428 صوت بأربع مكتبات بالمكتبة ← 🔊 (كل كرت بيه ‹ › لتقليب النسخ): **واجهات ونقرات** (101 + 50)، **ارتطامات وضربات** (130: لكمات، زجاج، معدن، خشب، جرس، خطوات)، **موسيقى قصيرة/جنغلز** (85)، **رقمي وخيال علمي** (62: ليزر، باور أب، فيزر).
+أسماء يكدر Auto Edit يستخدمها (غير الـ 19 المصنّعة): `punch` (punchline قوي)، `softThud` (كرت ينزل)، `glassTap` (زجاج يظهر)، `glassHit` (صدمة)، `bell` (معلومة مهمة/نهاية)، `powerUp` (تحسّن/إنجاز)، `uiConfirm` (✓)، `uiGlass` (لمعة خفيفة)، `jingleHit` (افتتاحية/خاتمة حماسية)، `jingleSax` (خاتمة مرحة).
