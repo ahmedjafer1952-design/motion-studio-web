@@ -32,6 +32,7 @@ export interface ClaudeEditOutput {
   accentColor?: string;
   broll?: { atWord: number; endWord: number; description: string }[];
   zooms: { atWord: number; strength: string }[];
+  transitions?: { atWord: number; kind: string }[];
   sounds: { atWord: number; sound: string }[];
   colorGrade: string;
   cta: string | null;

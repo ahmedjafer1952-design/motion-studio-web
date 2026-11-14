@@ -1,7 +1,7 @@
 import type { EditPlan, KeyPhraseLook } from "../autoEdit";
 
 const KEY_LOOKS: KeyPhraseLook[] = ["neon", "box", "glass", "stretch", "card"];
-import type { CaptionStyle, ColorGradeId } from "../../types";
+import type { CaptionStyle, ColorGradeId, TransitionKind } from "../../types";
 import { PACK_SOUND_ALIASES, SOUND_LIBRARY, type SoundId } from "../sounds";
 import { COLOR_GRADES } from "../colorGrade";
 import type { TranscribedWord } from "../transcribe";
@@ -9,6 +9,7 @@ import type { AiEditRequest, ClaudeEditOutput } from "./types";
 
 const CAPTION_STYLES: CaptionStyle[] = ["bigWord", "karaokeLine", "pillWord", "emphasisOnly", "buildUp", "phraseStack", "glassPill", "minimal", "scatter"];
 const SOUND_IDS = new Set<string>([...SOUND_LIBRARY.map((s) => s.id), ...Object.keys(PACK_SOUND_ALIASES)]);
+const TRANSITION_IDS = new Set<string>(["zoomBlur", "whip", "spin", "shake", "flash", "glitch", "filmBurn", "blurDip"]);
 const GRADE_IDS = new Set<string>(COLOR_GRADES.map((g) => g.id));
 
 const KEY_STORAGE = "motion-studio-claude-key";
@@ -143,6 +144,10 @@ export function planFromClaude(words: TranscribedWord[], out: ClaudeEditOutput):
     zooms: out.zooms
       .filter((z) => valid(z.atWord))
       .map((z) => ({ time: at(z.atWord), strength: z.strength.trim() === "strong" ? ("strong" as const) : ("light" as const) })),
+    transitions: (out.transitions ?? [])
+      .filter((t) => valid(t.atWord) && TRANSITION_IDS.has(t.kind.trim()))
+      .slice(0, 12)
+      .map((t) => ({ time: at(t.atWord), kind: t.kind.trim() as TransitionKind })),
     sounds: out.sounds
       .filter((s) => valid(s.atWord) && SOUND_IDS.has(s.sound.trim()))
       .map((s) => ({ sound: s.sound.trim() as SoundId, time: at(s.atWord) })),

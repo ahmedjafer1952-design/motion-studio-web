@@ -39,7 +39,8 @@ export type LayerType =
   | "chart"
   | "cutout"
   | "arrow"
-  | "doodle";
+  | "doodle"
+  | "transition";
 
 export interface TextLayerProps {
   content: string; // wrap a word in [brackets] to render it in emphasisColor
@@ -126,6 +127,15 @@ export interface VideoBackground {
 }
 
 export type VideoLook = "grayscale" | "dim" | "blur";
+
+/** A cut transition laid over the footage: it peaks at the middle of the layer (the cut point). */
+export type TransitionKind = "zoomBlur" | "whip" | "spin" | "shake" | "flash" | "glitch" | "filmBurn" | "blurDip";
+export interface TransitionLayerProps {
+  kind: TransitionKind;
+  intensity: number; // 0..1.5
+  direction?: "left" | "right" | "up" | "down";
+  color?: string; // flash color
+}
 
 /** Hand-drawn accents that draw themselves on: the scribbles human editors add by hand. */
 export type DoodleKind = "questions" | "scribbleCircle" | "underline" | "sparkle" | "burst" | "dots";
@@ -247,7 +257,8 @@ export interface Layer {
     | ChartLayerProps
     | CutoutLayerProps
     | ArrowLayerProps
-    | DoodleLayerProps;
+    | DoodleLayerProps
+    | TransitionLayerProps;
 }
 
 export type ColorGradeId =

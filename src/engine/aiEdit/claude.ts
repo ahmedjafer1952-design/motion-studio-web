@@ -29,6 +29,7 @@ const ClaudeEditSchema = z.object({
   accentColor: z.string().describe("Brand accent color as #rrggbb"),
   broll: z.array(z.object({ atWord: wordIndex(), endWord: wordIndex(), description: z.string() })),
   zooms: z.array(z.object({ atWord: wordIndex(), strength: z.string().describe("light or strong") })),
+  transitions: z.array(z.object({ atWord: wordIndex(), kind: z.string().describe("One of: zoomBlur, whip, spin, shake, flash, glitch, filmBurn, blurDip") })),
   sounds: z.array(z.object({ atWord: wordIndex(), sound: z.string().describe(`One of: ${soundList}`) })),
   colorGrade: z.string().describe(`One of: ${gradeList}`),
   cta: z.string().nullable(),

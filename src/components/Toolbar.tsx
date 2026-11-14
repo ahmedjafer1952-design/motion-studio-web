@@ -143,6 +143,7 @@ export function Toolbar() {
         <button onClick={() => addLayer("chart")}>📊 Chart</button>
         <button onClick={() => addLayer("arrow")}>↷ Arrow</button>
         <button onClick={() => addLayer("doodle")}>✎ Doodle</button>
+        <button onClick={() => addLayer("transition")} title="انتقال: زوم، سحبة، لفّة، هزّة، فلاش، Glitch، حرقة فيلم — حط نصّه على القطع">⚡ Transition</button>
       </div>
 
       <div className="toolbar-group">

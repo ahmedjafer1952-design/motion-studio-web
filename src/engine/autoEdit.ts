@@ -1,4 +1,4 @@
-import type { DoodleLayerProps, VideoLayerProps, VideoLook, GlassLayerProps, CaptionLayerProps, CaptionStyle, CaptionWord, ColorGradeId, Composition, Layer, TextLayerProps } from "../types";
+import type { TransitionKind, TransitionLayerProps, DoodleLayerProps, VideoLayerProps, VideoLook, GlassLayerProps, CaptionLayerProps, CaptionStyle, CaptionWord, ColorGradeId, Composition, Layer, TextLayerProps } from "../types";
 import { soundSrcId, type SoundId } from "./sounds";
 import { createLayer } from "./factory";
 import { segmentsDuration, sourceToLocal } from "./cuts";
@@ -418,6 +418,8 @@ export interface EditPlan {
   /** "editorial" = restrained modern pro look; "bold" = high-energy reels look. */
   style?: EditStyle;
   zooms: { time: number; strength: "light" | "strong" }[];
+  /** Cut transitions over the footage, centered on these times (source seconds). */
+  transitions?: { time: number; kind: TransitionKind }[];
   sounds: { sound: SoundId; time: number }[];
   colorGrade: ColorGradeId | null;
   cta: string | null;
@@ -830,6 +832,24 @@ export function buildEditFromPlan(
     newLayers.length = 0;
     newLayers.push(...reordered);
   }
+  // Cut transitions sit just above the footage (the back of the new layers), so the text
+  // and graphics on top stay sharp while the frame whips, zooms or burns underneath.
+  let lastTr = -Infinity;
+  [...(plan.transitions ?? [])]
+    .sort((a, b) => a.time - b.time)
+    .forEach((tr, i) => {
+      const t = toCompTime(tr.time);
+      if (!inClip(t, 0.3) || t < sourceLayer.startTime + 0.3 || t - lastTr < 1.5) return;
+      lastTr = t;
+      const half = tr.kind === "flash" ? 0.12 : tr.kind === "filmBurn" || tr.kind === "blurDip" ? 0.35 : 0.2;
+      const layer = createLayer("transition", comp);
+      layer.name = `Auto Transition ${i + 1} (${tr.kind})`;
+      layer.startTime = t - half;
+      layer.endTime = t + half;
+      const dirs = ["left", "right", "up", "down"] as const;
+      layer.props = { kind: tr.kind, intensity: tr.kind === "flash" ? 0.85 : 0.8, direction: dirs[i % 2], color: "#ffffff" } as TransitionLayerProps;
+      newLayers.push(layer);
+    });
   if (plan.studioBackground && sourceLayer.type === "video") {
     const base = accent ?? "#3a3f4b";
     (updatedSourceLayer.props as VideoLayerProps).background = { kind: "studio", color: darken(base, 0.45), color2: "#05060a" };

@@ -14,6 +14,7 @@ import type {
   CutoutLayerProps,
   ArrowLayerProps,
   DoodleLayerProps,
+  TransitionLayerProps,
   VideoBackground,
   PolygonLayerProps,
   Point,
@@ -26,6 +27,7 @@ import { probeMedia } from "../engine/importMedia";
 import { useEditorStore, type AttachedAudio, type AttachedVideo } from "../state/store";
 import { isSpeechSource, resolveMediaUrl, storeMediaFile } from "../engine/mediaStore";
 import { FONT_CHOICES } from "../engine/fonts";
+import { TRANSITION_KINDS } from "../engine/transitions";
 import { evaluateTransform } from "../engine/evaluate";
 import { PROPERTY_COLORS } from "./Timeline/constants";
 import type { ModelSize, TranscribeProgress } from "../engine/transcribe";
@@ -238,6 +240,9 @@ export function PropertiesPanel() {
         )}
         {layer.type === "glass" && (
           <GlassFields props={layer.props as GlassLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
+        )}
+        {layer.type === "transition" && (
+          <TransitionFields props={layer.props as TransitionLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
         )}
         {layer.type === "doodle" && (
           <DoodleFields props={layer.props as DoodleLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
@@ -1102,6 +1107,47 @@ function GlassFields({ props: p, onChange }: { props: GlassLayerProps; onChange:
       </div>
       <p className="hint">Blurs whatever is already drawn behind it (video, shapes…) — a real frosted-glass look.</p>
       <p className="hint">Rotation isn't supported on glass panels (position, scale and opacity still work).</p>
+    </>
+  );
+}
+
+function TransitionFields({ props: p, onChange }: { props: TransitionLayerProps; onChange: (p: Partial<TransitionLayerProps>) => void }) {
+  return (
+    <>
+      <label className="field">
+        <span>الانتقال</span>
+        <select value={p.kind} onChange={(e) => onChange({ kind: e.target.value as TransitionLayerProps["kind"] })}>
+          {TRANSITION_KINDS.map((k) => (
+            <option key={k.id} value={k.id}>
+              {k.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="field-row">
+        <label className="field">
+          <span>القوة</span>
+          <input type="range" min={0.1} max={1.5} step={0.05} value={p.intensity} onChange={(e) => onChange({ intensity: parseFloat(e.target.value) })} />
+        </label>
+        {(p.kind === "whip" || p.kind === "spin") && (
+          <label className="field">
+            <span>الاتجاه</span>
+            <select value={p.direction ?? "left"} onChange={(e) => onChange({ direction: e.target.value as TransitionLayerProps["direction"] })}>
+              <option value="left">يسار</option>
+              <option value="right">يمين</option>
+              <option value="up">فوق</option>
+              <option value="down">جوّه</option>
+            </select>
+          </label>
+        )}
+        {p.kind === "flash" && (
+          <label className="field">
+            <span>اللون</span>
+            <input type="color" value={p.color ?? "#ffffff"} onChange={(e) => onChange({ color: e.target.value })} />
+          </label>
+        )}
+      </div>
+      <p className="hint">الانتقال يكون بأقوى حالاته بنص الطبقة — حط نصها على مكان القطع.</p>
     </>
   );
 }

@@ -1,4 +1,5 @@
 import type {
+  TransitionLayerProps,
   AnimatedProperty,
   Composition,
   Layer,
@@ -77,6 +78,8 @@ export function defaultProps(type: LayerType): Layer["props"] {
       return { effect: "grain", intensity: 0.5, width: 1280, height: 720 } as OverlayLayerProps;
     case "doodle":
       return { kind: "sparkle", width: 160, height: 160, color: "#ffffff", thickness: 5, drawDuration: 0.5 } as DoodleLayerProps;
+    case "transition":
+      return { kind: "zoomBlur", intensity: 0.8, direction: "left", color: "#ffffff" } as TransitionLayerProps;
     case "arrow":
       return { width: 320, height: 160, color: "#ffffff", thickness: 4, curve: 0.8, dashed: true, drawDuration: 0.6 } as ArrowLayerProps;
     case "cutout":
@@ -103,6 +106,11 @@ export function createLayer(type: LayerType, comp: Composition): Layer {
   if (type === "overlay") {
     (props as OverlayLayerProps).width = comp.width;
     (props as OverlayLayerProps).height = comp.height;
+  }
+  if (type === "transition") {
+    // A short effect centered on the playhead's neighborhood; the user slides it onto a cut.
+    const transform = defaultTransform(comp.width, comp.height, comp.width, comp.height);
+    return { id: makeId("layer"), name: `Transition ${comp.layers.length + 1}`, type, startTime: 0, endTime: Math.min(comp.duration, 0.4), transform, props };
   }
   const w = "width" in props ? props.width : 300;
   const h = "height" in props ? props.height : 300;

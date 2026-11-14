@@ -1,4 +1,5 @@
 import type {
+  TransitionLayerProps,
   AudioLayerProps,
   CaptionLayerProps,
   CaptionWord,
@@ -21,6 +22,7 @@ import type {
 } from "../types";
 import { evaluateTransform } from "./evaluate";
 import { drawChart } from "./chart";
+import { drawTransition } from "./transitions";
 import { localToSource } from "./cuts";
 import { getPersonMask } from "./segmentation";
 import { drawLiquidGlass, drawLiquidGlassLocal } from "./liquidGlass";
@@ -1446,6 +1448,12 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
     return; // audio layers have nothing to draw
   } else if (layer.type === "glass") {
     drawGlassPanel(ctx, layer, time);
+    return;
+  } else if (layer.type === "transition") {
+    if (active) {
+      const dur = Math.max(0.001, layer.endTime - layer.startTime);
+      drawTransition(ctx, layer.props as TransitionLayerProps, (time - layer.startTime) / dur);
+    }
     return;
   } else if (layer.type === "cutout") {
     if (active) drawCutout(ctx, layer, time, opts);
