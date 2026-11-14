@@ -1,4 +1,4 @@
-import type { VideoLayerProps, VideoLook, GlassLayerProps, CaptionLayerProps, CaptionStyle, CaptionWord, ColorGradeId, Composition, Layer, TextLayerProps } from "../types";
+import type { DoodleLayerProps, VideoLayerProps, VideoLook, GlassLayerProps, CaptionLayerProps, CaptionStyle, CaptionWord, ColorGradeId, Composition, Layer, TextLayerProps } from "../types";
 import { soundSrcId, type SoundId } from "./sounds";
 import { createLayer } from "./factory";
 import { segmentsDuration, sourceToLocal } from "./cuts";
@@ -311,6 +311,61 @@ function editorialHeadline(comp: Composition, kicker: string, main: string, y: n
   return out;
 }
 
+// --- Trend (2026 reels) look ---------------------------------------------------
+// Seen across current top reels: a small line over ONE huge word set above the speaker's head,
+// revealed by sharpening out of blur or by letters scrambling into place; marker doodles
+// (sparkle, underline, circled word, question marks) drawn by hand; scattered word captions;
+// and the occasional full-screen color card as a hard cut on the biggest beat.
+
+const TREND_HEAVY = "'thmanyahsans', 'Alexandria', 'Cairo', sans-serif";
+
+function doodle(comp: Composition, kind: DoodleLayerProps["kind"], x: number, y: number, size: number, color: string, start: number, end: number, name: string): Layer {
+  const d = createLayer("doodle", comp);
+  d.name = name;
+  d.startTime = start;
+  d.endTime = end;
+  d.transform.position.static = { x, y };
+  d.props = { kind, width: size, height: kind === "underline" ? size * 0.3 : kind === "questions" ? size * 0.5 : size, color, thickness: Math.max(3, size * 0.035), drawDuration: 0.45 } as DoodleLayerProps;
+  return applyPresetToLayer(d, "fadeOut", comp);
+}
+
+/** Small line over one huge word, centered above the head, with a reveal and a doodle. */
+function trendHeadline(comp: Composition, kicker: string, main: string, start: number, end: number, accent: string, name: string, seed: number): Layer[] {
+  const unit = Math.min(comp.width, comp.height);
+  const vertical = comp.height > comp.width;
+  const cx = comp.width / 2;
+  const y = comp.height * (vertical ? 0.16 : 0.22);
+  const mainSize = fitFont(main, Math.round(unit * 0.16), comp.width * 0.86);
+  const t0 = start + humanize(seed);
+  const out: Layer[] = [];
+  if (kicker) {
+    let k = makeText(comp, { content: kicker, fontSize: fitFont(kicker, Math.round(unit * 0.045), comp.width * 0.8), color: "rgba(255,255,255,0.9)", x: cx, y: y - mainSize * 0.72, startTime: t0, endTime: end, name: `${name} Kicker`, fontFamily: KICKER_FONT });
+    out.push(applyPresetToLayer(applyPresetToLayer(k, "fadeUp", comp), "fadeOut", comp));
+  }
+  let m = makeText(comp, { content: main, fontSize: mainSize, color: "#ffffff", x: cx, y, startTime: t0 + 0.1, endTime: end, name, fontFamily: TREND_HEAVY });
+  m.props = { ...(m.props as TextLayerProps), bold: true, ...(seed % 2 ? { scrambleIn: 0.5 } : { blurIn: 0.5 }) };
+  out.push(applyPresetToLayer(m, "fadeOut", comp));
+  const w = Math.min(comp.width * 0.86, estTextWidth(main, mainSize));
+  const isQuestion = /[؟?]/.test(kicker + main);
+  const kind: DoodleLayerProps["kind"] = isQuestion ? "questions" : (["sparkle", "underline", "scribbleCircle"] as const)[seed % 3];
+  // Question marks surround the word rather than sitting on it.
+  if (kind === "questions") out.push(doodle(comp, kind, cx, y - mainSize * 0.1, Math.min(comp.width * 0.92, Math.max(w * 1.7, unit * 0.55)), accent, t0 + 0.35, end, `${name} Doodle`));
+  else if (kind === "underline") out.push(doodle(comp, kind, cx, y + mainSize * 0.62, w * 0.9, accent, t0 + 0.45, end, `${name} Doodle`));
+  else if (kind === "scribbleCircle") out.push(doodle(comp, kind, cx, y, Math.max(w * 1.15, mainSize * 1.6), accent, t0 + 0.45, end, `${name} Doodle`));
+  else out.push(doodle(comp, kind, cx + w / 2 + mainSize * 0.25, y - mainSize * 0.45, mainSize * 0.45, accent, t0 + 0.4, end, `${name} Doodle`));
+  return out;
+}
+
+/** Full-screen color card with one huge word — a hard cut on the biggest beat. */
+function typeCard(comp: Composition, text: string, start: number, end: number, color: string, name: string): Layer[] {
+  const unit = Math.min(comp.width, comp.height);
+  const bg = makeRect(comp, { width: comp.width, height: comp.height, color, x: comp.width / 2, y: comp.height / 2, startTime: start, endTime: end, name: `${name} Card` });
+  const dark = /^#?(?:[a-f0-9]{2}){3}$/i.test(color) && parseInt(color.replace("#", "").slice(0, 2), 16) * 0.3 + parseInt(color.replace("#", "").slice(2, 4), 16) * 0.59 + parseInt(color.replace("#", "").slice(4, 6), 16) * 0.11 < 140;
+  let t = makeText(comp, { content: text.replace(/[[\]]/g, ""), fontSize: fitFont(text, Math.round(unit * 0.2), comp.width * 0.86), color: dark ? "#ffffff" : "#0b0b0b", x: comp.width / 2, y: comp.height / 2, startTime: start, endTime: end, name, fontFamily: TREND_HEAVY });
+  t.props = { ...(t.props as TextLayerProps), bold: true };
+  return [applyPresetToLayer(t, "zoomPunch", comp), bg];
+}
+
 /** Tilted call-to-action in the top corner, like the "بالتعليقات" stamp in pro edits. */
 function ctaButtonAt(comp: Composition, text: string, start: number, end: number): Layer[] {
   const unit = Math.min(comp.width, comp.height);
@@ -330,9 +385,9 @@ function ctaButtonAt(comp: Composition, text: string, start: number, end: number
 // source-clip seconds; buildEditFromPlan turns it into layers. Keeping the two apart means
 // both brains share exactly the same, tested layout code.
 
-export type KeyPhraseLook = "neon" | "box" | "glass" | "stretch";
+export type KeyPhraseLook = "neon" | "box" | "glass" | "stretch" | "card";
 
-export type EditStyle = "editorial" | "bold";
+export type EditStyle = "editorial" | "bold" | "trend";
 
 /** Cartoonish/game sounds a restrained editorial edit never uses. */
 const LOUD_SOUNDS = new Set(["bubble", "laser", "coin", "notification", "typewriterKey", "camera", "magic", "drop", "jingleSax", "success", "drumHit"]);
@@ -447,6 +502,14 @@ export function buildEditFromPlan(
     captions.transform.position.static = { x: comp.width / 2, y: comp.height * (vertical ? 0.62 : 0.72) };
     (captions.props as CaptionLayerProps).fontSize = Math.round(Math.min(comp.width, comp.height) * 0.085);
   }
+  if (plan.style === "trend") {
+    const props = captions.props as CaptionLayerProps;
+    if (props.style !== "minimal" && props.style !== "glassPill") props.style = "scatter";
+    props.fontSize = Math.round(Math.min(comp.width, comp.height) * (props.style === "scatter" ? 0.07 : 0.056));
+    props.fontFamily = TREND_HEAVY;
+    props.emphasisColor = accent ?? "#c8ff00";
+    captions.transform.position.static = { x: comp.width / 2, y: comp.height * (vertical ? (props.style === "scatter" ? 0.58 : 0.8) : 0.7) };
+  }
   if (plan.style === "editorial") {
     // Editorial captions: small, low, regular weight — the speaker carries the frame, not the text.
     const props = captions.props as CaptionLayerProps;
@@ -467,11 +530,17 @@ export function buildEditFromPlan(
   }
   newLayers.push(captions);
 
-  const editorial = plan.style === "editorial";
-  const accentE = accent ?? "#e8c37b";
+  const trend = plan.style === "trend";
+  // Trend shares the editorial restraint (lists, zooms, subtle sound) and swaps the typography.
+  const editorial = plan.style === "editorial" || trend;
+  const accentE = accent ?? (trend ? "#c8ff00" : "#e8c37b");
   if (plan.title) {
     const tEnd = Math.min(sourceLayer.startTime + 2.5, sourceLayer.endTime);
-    if (editorial) {
+    if (trend) {
+      const words = plan.title.split(/\s+/).filter(Boolean);
+      const main = words.length > 1 ? words[words.length - 1] : plan.title;
+      newLayers.push(...trendHeadline(comp, words.slice(0, -1).join(" "), main, sourceLayer.startTime, tEnd, accentE, "Auto Title", 0));
+    } else if (editorial) {
       const words = plan.title.split(/\s+/).filter(Boolean);
       const main = words.length > 2 ? words.slice(-2).join(" ") : plan.title;
       const kicker = words.length > 2 ? words.slice(0, -2).join(" ") : "";
@@ -501,6 +570,10 @@ export function buildEditFromPlan(
     if (!inClip(t, 0.3)) return;
     const end = Math.min(t + 2.2, sourceLayer.endTime);
     if (!claim(t, end)) return;
+    if (trend) {
+      newLayers.push(...trendHeadline(comp, n.label, n.text, t, end, accentE, `Auto Number ${idx + 1}`, idx + 5));
+      return;
+    }
     if (editorial) {
       // Serif numeral, flush right, with a light label and a rule.
       const unit = Math.min(comp.width, comp.height);
@@ -605,6 +678,20 @@ export function buildEditFromPlan(
     const look = k.look ?? "neon";
     const color = accent ? lighten(accent, 0.45) : NEON;
     if (!claim(t, Math.min(t + 2.4, sourceLayer.endTime))) return;
+    if (look === "card" && plan.style !== "editorial") {
+      const cardEnd = Math.min(t + 0.9, sourceLayer.endTime);
+      const m = /\[([^\]]+)\]/.exec(k.text);
+      // In front of everything, captions included: it's a full-frame cut.
+      newLayers.unshift(...typeCard(comp, m ? m[1] : k.text, t, cardEnd, accent ?? (trend ? "#c8ff00" : "#ffffff"), `Auto Type Card ${idx + 1}`));
+      return;
+    }
+    if (trend) {
+      const m = /\[([^\]]+)\]/.exec(k.text);
+      const main = m ? m[1] : k.text;
+      const kicker = m ? k.text.replace(m[0], "").replace(/\s+/g, " ").trim() : "";
+      newLayers.push(...trendHeadline(comp, kicker, main, t, Math.min(t + 2.4, sourceLayer.endTime), accentE, `Auto Key Phrase ${idx + 1}`, idx + 1));
+      return;
+    }
     if (editorial) {
       // The [bracketed] word becomes the heavy line; the rest of the phrase is its kicker.
       const m = /\[([^\]]+)\]/.exec(k.text);

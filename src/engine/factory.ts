@@ -7,6 +7,7 @@ import type {
   ChartLayerProps,
   CutoutLayerProps,
   ArrowLayerProps,
+  DoodleLayerProps,
   Point,
   Project,
   ShapeLayerProps,
@@ -74,6 +75,8 @@ export function defaultProps(type: LayerType): Layer["props"] {
       };
     case "overlay":
       return { effect: "grain", intensity: 0.5, width: 1280, height: 720 } as OverlayLayerProps;
+    case "doodle":
+      return { kind: "sparkle", width: 160, height: 160, color: "#ffffff", thickness: 5, drawDuration: 0.5 } as DoodleLayerProps;
     case "arrow":
       return { width: 320, height: 160, color: "#ffffff", thickness: 4, curve: 0.8, dashed: true, drawDuration: 0.6 } as ArrowLayerProps;
     case "cutout":

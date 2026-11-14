@@ -220,12 +220,14 @@ export const CAPTION_CARDS: CaptionCard[] = [
   { kind: "caption", id: "karaokeLine", label: "كاريوكي", description: "السطر كامل، تمييز الكلمة أثناء النطق", swatch: ["#4f8cff", "#1b1b1e"] },
   { kind: "caption", id: "pillWord", label: "كبسولة زجاجية", description: "كلمة داخل خلفية زجاجية شفافة", swatch: ["#a78bfa", "#2a2a30"] },
   { kind: "caption", id: "emphasisOnly", label: "تمييز كلمة", description: "خط كامل، تمييز الكلمات المهمة فقط بالذهبي", swatch: ["#ffd166", "#1b1b1e"] },
+  { kind: "caption", id: "scatter", label: "كلمات متناثرة (ترند)", description: "كل كلمة بحجم ومكان مختلف حول المتكلم — المهمة كبيرة ومايلة", swatch: ["#c8ff00", "#1b1b1e"] },
   { kind: "caption", id: "glassPill", label: "كبسولة زجاج", description: "العبارة داخل كبسولة زجاجية حقيقية تطلع مع كل جملة", swatch: ["#ffffff", "#3a3a44"] },
   { kind: "caption", id: "phraseStack", label: "احترافي متدرّج", description: "سطر عريض وتحته أسطر أصغر، الكلمات تطلع وحدة وحدة والمهمة تتوهج بالأحمر", swatch: ["#ff3b3b", "#1b1b1e"] },
   { kind: "caption", id: "buildUp", label: "تراكمي", description: "الكلمات تتجمع وتبقى ظاهرة أثناء الكلام", swatch: ["#7cff8a", "#1b1b1e"] },
 ];
 
 export const ELEMENT_CARDS: ElementCard[] = [
+  { kind: "element", id: "doodle", layerType: "doodle", label: "رسمة بالقلم", description: "؟؟؟، دائرة، خط تحت، لمعة، انفجار — شغل يدوي يرسم لحاله", swatch: ["#ffffff", "#1b1b1e"] },
   { kind: "element", id: "arrow", layerType: "arrow", label: "سهم منقّط", description: "سهم مرسوم باليد ينرسم لحاله — يربط بين الكلام", swatch: ["#e5e5e5", "#1b1b1e"] },
   { kind: "element", id: "chart", layerType: "chart", label: "رسم بياني متحرك", description: "أعمدة، دائري، شريط تقدم أو خط — الأرقام تعد وهي تطلع", swatch: ["#4f8cff", "#1b1b1e"] },
   { kind: "element", id: "glass", layerType: "glass", label: "لوحة زجاجية", description: "تمويه زجاجي حقيقي فوق الفيديو", swatch: ["#e4e4e8", "#28282d"] },

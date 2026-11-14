@@ -38,7 +38,8 @@ export type LayerType =
   | "overlay"
   | "chart"
   | "cutout"
-  | "arrow";
+  | "arrow"
+  | "doodle";
 
 export interface TextLayerProps {
   content: string; // wrap a word in [brackets] to render it in emphasisColor
@@ -54,6 +55,9 @@ export interface TextLayerProps {
   glow?: string; // neon glow color around the text
   outline?: boolean; // draw only the letter outlines (big hollow numbers)
   wordStagger?: number; // seconds between words springing in one after another (0/undefined = off)
+  blurIn?: number; // seconds: the text sharpens out of a heavy blur (trend reveal)
+  scrambleIn?: number; // seconds: letters cycle randomly then settle into the word (decode reveal)
+  arc?: number; // >0: words set along an arc of this radius (px), curving over the anchor point
   shine?: boolean; // a diagonal light sweep runs across the letters (premium/metallic)
   rgbSplit?: number; // px of red/cyan channel separation (glitch / chromatic aberration)
   wipeIn?: number; // seconds for a right-to-left wipe reveal (mask reveal)
@@ -104,6 +108,7 @@ export interface VideoLayerProps {
   fadeBottom?: number; // 0–1: fraction of the bottom edge that fades to transparent (split-screen B-roll)
   /** Jump cuts: source-time ranges played back to back (replaces trimIn when set). */
   segments?: { start: number; end: number }[];
+  circleMask?: number; // 0–1: show the video inside a circle (iris / spotlight), as a fraction of its width
   look?: VideoLook; // background treatment, usually paired with a person cutout on top
   background?: VideoBackground; // replace everything behind the person
 }
@@ -121,6 +126,17 @@ export interface VideoBackground {
 }
 
 export type VideoLook = "grayscale" | "dim" | "blur";
+
+/** Hand-drawn accents that draw themselves on: the scribbles human editors add by hand. */
+export type DoodleKind = "questions" | "scribbleCircle" | "underline" | "sparkle" | "burst" | "dots";
+export interface DoodleLayerProps {
+  kind: DoodleKind;
+  width: number;
+  height: number;
+  color: string;
+  thickness: number;
+  drawDuration: number;
+}
 
 /** A curved arrow that draws itself on, start (left) to tip (right) — rotate/flip with the transform. */
 export interface ArrowLayerProps {
@@ -151,7 +167,7 @@ export interface AudioLayerProps {
   segments?: { start: number; end: number }[];
 }
 
-export type CaptionStyle = "bigWord" | "karaokeLine" | "pillWord" | "emphasisOnly" | "buildUp" | "phraseStack" | "glassPill" | "minimal";
+export type CaptionStyle = "bigWord" | "karaokeLine" | "pillWord" | "emphasisOnly" | "buildUp" | "phraseStack" | "glassPill" | "minimal" | "scatter";
 
 export interface CaptionWord {
   id: string;
@@ -230,7 +246,8 @@ export interface Layer {
     | OverlayLayerProps
     | ChartLayerProps
     | CutoutLayerProps
-    | ArrowLayerProps;
+    | ArrowLayerProps
+    | DoodleLayerProps;
 }
 
 export type ColorGradeId =
@@ -244,7 +261,11 @@ export type ColorGradeId =
   | "cyberpunk"
   | "fadedPastel"
   | "goldenHour"
-  | "dayForNight";
+  | "dayForNight"
+  | "duoBlue"
+  | "duoRed"
+  | "duoGreen"
+  | "monoAccent";
 
 export interface Composition {
   id: string;

@@ -21,11 +21,11 @@ const ClaudeEditSchema = z.object({
   rewrites: z.array(z.object({ fromWord: wordIndex(), toWord: wordIndex(), text: z.string() })),
   removals: z.array(z.object({ fromWord: wordIndex(), toWord: wordIndex() })),
   emphasis: z.array(wordIndex()),
-  captionStyle: z.string().describe("One of: bigWord, karaokeLine, pillWord, emphasisOnly, buildUp, phraseStack, glassPill, minimal"),
+  captionStyle: z.string().describe("One of: bigWord, karaokeLine, pillWord, emphasisOnly, buildUp, phraseStack, glassPill, minimal, scatter"),
   title: z.string().nullable(),
   numbers: z.array(z.object({ atWord: wordIndex(), value: z.string(), label: z.string() })),
   lists: z.array(z.object({ items: z.array(z.object({ atWord: wordIndex(), text: z.string() })) })),
-  keyPhrases: z.array(z.object({ atWord: wordIndex(), text: z.string(), look: z.string().describe("One of: neon, box, glass, stretch") })),
+  keyPhrases: z.array(z.object({ atWord: wordIndex(), text: z.string(), look: z.string().describe("One of: neon, box, glass, stretch, card") })),
   accentColor: z.string().describe("Brand accent color as #rrggbb"),
   broll: z.array(z.object({ atWord: wordIndex(), endWord: wordIndex(), description: z.string() })),
   zooms: z.array(z.object({ atWord: wordIndex(), strength: z.string().describe("light or strong") })),
@@ -70,7 +70,7 @@ export function validateRequest(raw: unknown): AiEditRequest {
       width: Number(r.frame?.width) > 0 ? Number(r.frame?.width) : 1280,
       height: Number(r.frame?.height) > 0 ? Number(r.frame?.height) : 720,
     },
-    style: r.style === "bold" ? "bold" : "editorial",
+    style: r.style === "bold" || r.style === "trend" ? r.style : "editorial",
     brandColor: typeof r.brandColor === "string" && /^#[0-9a-f]{6}$/i.test(r.brandColor) ? r.brandColor : undefined,
   };
 }

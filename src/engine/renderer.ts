@@ -10,6 +10,7 @@ import type {
   ChartLayerProps,
   CutoutLayerProps,
   ArrowLayerProps,
+  DoodleLayerProps,
   VideoBackground,
   Composition as Comp,
   PolygonLayerProps,
@@ -427,6 +428,38 @@ function drawStaggeredWords(ctx: CanvasRenderingContext2D, p: TextLayerProps, co
   });
 }
 
+/** Words laid along the top of a circle, read right-to-left, each turned to the curve. */
+function drawArcText(ctx: CanvasRenderingContext2D, p: TextLayerProps, localTime: number) {
+  const r = p.arc ?? 200;
+  ctx.font = `${p.bold ? "bold " : ""}${p.fontSize}px ${p.fontFamily}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.direction = "rtl";
+  const words = parseEmphasisWords(p.content);
+  const gap = p.fontSize * 0.35;
+  const widths = words.map((w) => ctx.measureText(w.text).width);
+  const total = widths.reduce((a, b) => a + b, 0) + gap * Math.max(0, words.length - 1);
+  // Reveal word by word along the arc.
+  const reveal = p.wordStagger ? Math.floor(localTime / p.wordStagger) + 1 : words.length;
+  let angle = total / r / 2; // start on the right (first word in Arabic reading order)
+  if (p.glow) {
+    ctx.shadowColor = p.glow;
+    ctx.shadowBlur = p.fontSize * 0.3;
+  }
+  words.forEach((w, i) => {
+    const half = widths[i] / 2 / r;
+    angle -= half;
+    if (i < reveal) {
+      ctx.save();
+      ctx.rotate(angle);
+      ctx.fillStyle = w.emphasis ? p.emphasisColor ?? "#ffd166" : p.color;
+      ctx.fillText(w.text, 0, -r);
+      ctx.restore();
+    }
+    angle -= half + gap / r;
+  });
+}
+
 let fxBuffer: HTMLCanvasElement | null = null;
 
 /**
@@ -499,7 +532,41 @@ function drawTextWithFx(ctx: CanvasRenderingContext2D, p: TextLayerProps, localT
   ctx.restore();
 }
 
+const SCRAMBLE_AR = "ابتثجحخدذرزسشصضطظعغفقكلمنهوي";
+const SCRAMBLE_LAT = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&";
+
 function drawText(ctx: CanvasRenderingContext2D, p: TextLayerProps, localTime: number) {
+  // Blur-in: the text sharpens out of a heavy blur while settling from slightly larger.
+  if (p.blurIn && p.blurIn > 0 && localTime < p.blurIn) {
+    const k = Math.max(0, localTime / p.blurIn);
+    const e = 1 - Math.pow(1 - k, 3);
+    ctx.save();
+    ctx.globalAlpha *= Math.min(1, 0.15 + e);
+    const sc = 1.08 - 0.08 * e;
+    ctx.scale(sc, sc);
+    ctx.filter = `blur(${(p.fontSize * 0.28 * (1 - e)).toFixed(1)}px)`;
+    drawText(ctx, { ...p, blurIn: undefined }, localTime);
+    ctx.restore();
+    return;
+  }
+  // Scramble-in: unsettled letters flicker through random characters, settling one by one.
+  if (p.scrambleIn && p.scrambleIn > 0 && localTime < p.scrambleIn && p.countTo == null) {
+    const chars = [...p.content];
+    const arabic = /[\u0600-\u06FF]/.test(p.content);
+    const pool = arabic ? SCRAMBLE_AR : SCRAMBLE_LAT;
+    const tick = Math.floor(localTime / 0.05);
+    const settled = Math.floor((localTime / p.scrambleIn) * chars.length);
+    const scrambled = chars
+      .map((ch, i) => (i < settled || /[\s[\]]/.test(ch) ? ch : pool[Math.floor(rand(i * 13 + tick) * pool.length)]))
+      .join("");
+    drawText(ctx, { ...p, scrambleIn: undefined, content: scrambled }, localTime);
+    return;
+  }
+  // Arc: words set along a circle of radius `arc` around the anchor (curving over a head).
+  if (p.arc && p.arc > 0 && p.countTo == null) {
+    drawArcText(ctx, p, localTime);
+    return;
+  }
   if ((p.shine || p.rgbSplit || p.wipeIn) && p.countTo == null) {
     drawTextWithFx(ctx, p, localTime);
     return;
@@ -632,6 +699,56 @@ function drawCaption(ctx: CanvasRenderingContext2D, p: CaptionLayerProps, t: num
 
   if (p.style === "phraseStack") {
     drawPhraseStack(ctx, p, t);
+    return;
+  }
+
+  if (p.style === "scatter") {
+    // Kinetic word layout: each word of the phrase lands on its own line at its own size and
+    // offset as it's spoken — the key word huge and tilted, small words tiny — then the phrase clears.
+    const phrase = groupCaptionWordsIntoLines(p.words, 0.45, 6).find((l) => t >= l[0].start - 0.05 && t <= l[l.length - 1].end + 0.35);
+    if (!phrase) return;
+    const m = ctx.getTransform();
+    const frameW = ctx.canvas.width / Math.max(0.01, Math.hypot(m.a, m.b));
+    const seed = Math.round(phrase[0].start * 100);
+    const rows: { words: CaptionWord[]; size: number; dx: number; rot: number }[] = [];
+    for (const w of phrase) {
+      const small = [...w.text].length <= 3 && !w.emphasis;
+      const size = p.fontSize * (w.emphasis ? 1.9 : small ? 0.62 : 1);
+      const last = rows[rows.length - 1];
+      if (last && small && last.words.length < 2 && last.size <= p.fontSize) {
+        last.words.push(w);
+        continue;
+      }
+      const i = rows.length;
+      rows.push({ words: [w], size, dx: (rand(seed + i * 7) - 0.5) * frameW * 0.36, rot: w.emphasis ? (rand(seed + i) - 0.5) * 12 : 0 });
+    }
+    let y = 0;
+    ctx.textAlign = "center";
+    for (const row of rows) {
+      const lineH = row.size * 1.02;
+      const text = row.words.map((w) => w.text).join(" ");
+      const startT = row.words[0].start;
+      const age = t - startT;
+      if (age < -0.02) {
+        y += lineH;
+        continue;
+      }
+      const k = Math.min(1, Math.max(0, age / 0.12));
+      ctx.save();
+      ctx.translate(row.dx, y + lineH / 2);
+      ctx.rotate((row.rot * Math.PI) / 180);
+      const sc = 1.25 - 0.25 * k;
+      ctx.scale(sc, sc);
+      ctx.globalAlpha *= k;
+      ctx.font = `800 ${row.size}px ${p.fontFamily}`;
+      const emph = row.words.some((w) => w.emphasis);
+      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = row.size * 0.15;
+      ctx.fillStyle = emph ? p.emphasisColor : p.color;
+      ctx.fillText(text, 0, 0);
+      ctx.restore();
+      y += lineH;
+    }
     return;
   }
 
@@ -1033,8 +1150,110 @@ function drawCutout(ctx: CanvasRenderingContext2D, layer: Layer, time: number, o
     ctx.shadowColor = p.outline;
     ctx.shadowBlur = 24;
   }
+  ctx.filter = withGradeFilter();
   ctx.drawImage(person, -vp.width / 2, -vp.height / 2, vp.width, vp.height);
   ctx.restore();
+}
+
+/** Deterministic pseudo-random in [0,1) for a seed — doodles wobble the same way every frame. */
+function rand(seed: number): number {
+  const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/** Strokes a polyline up to fraction k of its length (draw-on). */
+function strokePartial(ctx: CanvasRenderingContext2D, pts: [number, number][], k: number) {
+  if (pts.length < 2 || k <= 0) return;
+  const lens = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+  let left = lens.reduce((a, b) => a + b, 0) * Math.min(1, k);
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 0; i < lens.length && left > 0; i++) {
+    const f = Math.min(1, left / lens[i]);
+    ctx.lineTo(pts[i][0] + (pts[i + 1][0] - pts[i][0]) * f, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * f);
+    left -= lens[i];
+  }
+  ctx.stroke();
+}
+
+/** Hand-drawn accents (slightly wobbly, drawn on like a marker): ?, circle scribble, underline, sparkle, burst, dots. */
+function drawDoodle(ctx: CanvasRenderingContext2D, p: DoodleLayerProps, localTime: number) {
+  const k = Math.min(1, Math.max(0, localTime / Math.max(0.05, p.drawDuration)));
+  if (k <= 0) return;
+  const w = p.width;
+  const h = p.height;
+  ctx.strokeStyle = p.color;
+  ctx.fillStyle = p.color;
+  ctx.lineWidth = p.thickness;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const wob = (i: number) => (rand(i) - 0.5) * p.thickness * 0.8;
+  if (p.kind === "scribbleCircle") {
+    // A loose loop that overshoots its start, like circling something with a marker.
+    const pts: [number, number][] = [];
+    for (let i = 0; i <= 64; i++) {
+      const a = -Math.PI * 0.6 + (i / 64) * Math.PI * 2.25;
+      const r = 1 + 0.06 * Math.sin(i * 0.7) + (i / 64) * 0.06;
+      pts.push([Math.cos(a) * (w / 2) * r + wob(i), Math.sin(a) * (h / 2) * r * 0.92 + wob(i + 99)]);
+    }
+    strokePartial(ctx, pts, k);
+  } else if (p.kind === "underline") {
+    const pts: [number, number][] = [];
+    for (let i = 0; i <= 20; i++) pts.push([-w / 2 + (i / 20) * w, Math.sin(i * 0.5) * h * 0.06 + (i / 20) * h * 0.08 + wob(i)]);
+    strokePartial(ctx, pts, k);
+    if (k > 0.6) strokePartial(ctx, pts.map(([x, y]) => [x * 0.85, y + p.thickness * 2.2] as [number, number]), (k - 0.6) / 0.4);
+  } else if (p.kind === "sparkle") {
+    // Four-point star with concave sides, scaling in.
+    const s = 0.4 + 0.6 * (1 - Math.pow(1 - k, 3));
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI) / 2 - Math.PI / 2;
+      const ox = Math.cos(a) * (w / 2) * s;
+      const oy = Math.sin(a) * (h / 2) * s;
+      if (i === 0) ctx.moveTo(ox, oy);
+      const na = a + Math.PI / 2;
+      ctx.quadraticCurveTo(0, 0, Math.cos(na) * (w / 2) * s, Math.sin(na) * (h / 2) * s);
+    }
+    ctx.closePath();
+    ctx.fill();
+  } else if (p.kind === "burst") {
+    // Short rays radiating out (like the "matters" burst), drawn outward.
+    const n = 12;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const r0 = (w / 2) * 0.35;
+      const r1 = r0 + ((w / 2) * 0.65) * (0.7 + 0.3 * rand(i));
+      const kk = Math.min(1, Math.max(0, k * 1.4 - (i % 3) * 0.1));
+      strokePartial(ctx, [[Math.cos(a) * r0, Math.sin(a) * r0], [Math.cos(a) * r1, Math.sin(a) * r1]], kk);
+    }
+  } else if (p.kind === "dots") {
+    const n = 10;
+    for (let i = 0; i < n; i++) {
+      if (k < i / n) break;
+      const a = rand(i * 3) * Math.PI * 2;
+      const r = (0.3 + 0.7 * rand(i * 7)) * (w / 2);
+      ctx.beginPath();
+      ctx.arc(Math.cos(a) * r, Math.sin(a) * r * (h / w), p.thickness * (0.6 + rand(i) * 0.8), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    // Three question marks around the anchor, popping in one after another, gently bobbing.
+    ctx.font = `bold ${h * 0.42}px 'Marhey', 'Comic Sans MS', cursive`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const spots: [number, number, number][] = [[-0.38, -0.1, -18], [0.05, -0.38, 8], [0.4, 0.05, 22]];
+    spots.forEach(([sx, sy, rot], i) => {
+      const kk = Math.min(1, Math.max(0, (k - i * 0.2) / 0.4));
+      if (kk <= 0) return;
+      ctx.save();
+      ctx.translate(sx * w, sy * h + Math.sin(localTime * 3 + i) * h * 0.02);
+      ctx.rotate((rot * Math.PI) / 180);
+      ctx.scale(kk, kk);
+      ctx.lineWidth = p.thickness;
+      ctx.strokeText("?", 0, 0);
+      ctx.restore();
+    });
+  }
 }
 
 function drawArrow(ctx: CanvasRenderingContext2D, p: ArrowLayerProps, localTime: number) {
@@ -1302,8 +1521,10 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
             c.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, x, y, w, h);
           } else c.drawImage(img, x, y, w, h);
         };
+        ctx.filter = withGradeFilter();
         if (p.fadeBottom && p.fadeBottom > 0) drawWithBottomFade(ctx, p.width, p.height, p.fadeBottom, (c, w, h) => paint(c, 0, 0, w, h));
         else paint(ctx, -p.width / 2, -p.height / 2, p.width, p.height);
+        ctx.filter = "none";
       }
       break;
     }
@@ -1314,6 +1535,7 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
       if (p.background) {
         const mask = getPersonMask(video, { quality: p.background.quality, edge: p.background.edge });
         if (mask) {
+          ctx.filter = withGradeFilter();
           drawVideoBackground(ctx, p.background, opts.session, video, p.width, p.height);
           const person = personBuffer(opts.session, video, mask, p.width, p.height, 1.5);
           if (person) {
@@ -1322,6 +1544,7 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
             ctx.shadowColor = "rgba(0,0,0,0.45)";
             ctx.shadowBlur = Math.min(p.width, p.height) * 0.04;
             ctx.shadowOffsetY = Math.min(p.width, p.height) * 0.01;
+            ctx.filter = withGradeFilter();
             ctx.drawImage(person, -p.width / 2, -p.height / 2, p.width, p.height);
             ctx.restore();
             if (p.background.lightWrap !== false) drawLightWrap(ctx, p.background, opts.session, video, mask, p.width, p.height);
@@ -1330,12 +1553,20 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
         }
         // Model still loading: fall through to the plain video for now.
       }
-      if (p.look) ctx.filter = VIDEO_LOOKS[p.look];
+      if (p.circleMask && p.circleMask > 0) {
+        // Iris / spotlight framing: the clip shows through a circle centered on the layer.
+        ctx.beginPath();
+        ctx.arc(0, 0, (Math.min(p.width, p.height) * Math.min(1, p.circleMask)) / 2, 0, Math.PI * 2);
+        ctx.clip();
+      }
+      ctx.filter = withGradeFilter(p.look ? VIDEO_LOOKS[p.look] : undefined);
       if (p.fadeBottom && p.fadeBottom > 0) {
         drawWithBottomFade(ctx, p.width, p.height, p.fadeBottom, (c, w, h) => opts.session.drawVideoFrame(c, video, 0, 0, w, h));
       } else {
         opts.session.drawVideoFrame(ctx, video, -p.width / 2, -p.height / 2, p.width, p.height);
       }
+      ctx.filter = "none";
+      if (!p.fadeBottom) gradeTint(ctx, -p.width / 2, -p.height / 2, p.width, p.height);
       break;
     }
     case "caption": {
@@ -1346,6 +1577,10 @@ function drawLayer(ctx: CanvasRenderingContext2D, layer: Layer, time: number, op
     }
     case "overlay": {
       drawOverlayEffect(ctx, layer.props as OverlayLayerProps);
+      break;
+    }
+    case "doodle": {
+      drawDoodle(ctx, layer.props as DoodleLayerProps, time - layer.startTime);
       break;
     }
     case "arrow": {
@@ -1377,10 +1612,39 @@ export function renderComposition(ctx: CanvasRenderingContext2D, comp: Compositi
   ctx.restore();
   resolvedOpts.session.endFrame(comp);
 
-  applyColorGrade(ctx, comp);
+  // Footage is graded as it's drawn (see footageGrade); the composite pass is only for
+  // compositions with no footage at all (faceless scenes, library previews).
+  if (!comp.layers.some((l) => l.type === "video" || l.type === "image")) applyColorGrade(ctx, comp);
 }
 
 /** Cinematic color-grade "look", applied as a post-process pass over the whole composite (preview and export alike). */
+/**
+ * The color grade applies to footage only — video, images and the cut-out person — the way an
+ * editor grades the clips and keeps titles and graphics in their true brand colors.
+ */
+function footageGrade() {
+  const g = getColorGrade(currentComp?.colorGrade);
+  return { filter: g.filter === "none" ? "" : g.filter, tint: g.tint };
+}
+
+function withGradeFilter(extra?: string): string {
+  const f = [extra, footageGrade().filter].filter(Boolean).join(" ");
+  return f || "none";
+}
+
+/** Lays the grade's color wash over a drawn footage rect (inside whatever clip is active). */
+function gradeTint(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  const { tint } = footageGrade();
+  if (!tint) return;
+  ctx.save();
+  ctx.filter = "none";
+  ctx.globalAlpha *= tint.alpha;
+  ctx.globalCompositeOperation = tint.blend;
+  ctx.fillStyle = tint.color;
+  ctx.fillRect(x, y, w, h);
+  ctx.restore();
+}
+
 function applyColorGrade(ctx: CanvasRenderingContext2D, comp: Composition) {
   const grade = getColorGrade(comp.colorGrade);
   if (grade.filter === "none" && !grade.tint) return;

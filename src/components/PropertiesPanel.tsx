@@ -13,6 +13,7 @@ import type {
   ChartLayerProps,
   CutoutLayerProps,
   ArrowLayerProps,
+  DoodleLayerProps,
   VideoBackground,
   PolygonLayerProps,
   Point,
@@ -237,6 +238,9 @@ export function PropertiesPanel() {
         )}
         {layer.type === "glass" && (
           <GlassFields props={layer.props as GlassLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
+        )}
+        {layer.type === "doodle" && (
+          <DoodleFields props={layer.props as DoodleLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
         )}
         {layer.type === "arrow" && (
           <ArrowFields props={layer.props as ArrowLayerProps} onChange={(p) => updateLayerProps(layer.id, p)} />
@@ -492,6 +496,20 @@ function TextFields({ props: p, onChange }: { props: TextLayerProps; onChange: (
             </label>
           </div>
           <div className="field-row">
+            <label className="field">
+              <span>ظهور من الضبابية (ث)</span>
+              <NumInput min={0} step={0.1} value={p.blurIn ?? 0} onChange={(e) => onChange({ blurIn: Math.max(0, parseFloat(e.target.value) || 0) || undefined })} />
+            </label>
+            <label className="field">
+              <span>حروف تتلخبط وتثبت (ث)</span>
+              <NumInput min={0} step={0.1} value={p.scrambleIn ?? 0} onChange={(e) => onChange({ scrambleIn: Math.max(0, parseFloat(e.target.value) || 0) || undefined })} />
+            </label>
+            <label className="field">
+              <span>تقويس حول نقطة (نصف القطر px)</span>
+              <NumInput min={0} value={p.arc ?? 0} onChange={(e) => onChange({ arc: Math.max(0, parseFloat(e.target.value) || 0) || undefined })} />
+            </label>
+          </div>
+          <div className="field-row">
             <label className="field field-checkbox">
               <input type="checkbox" checked={!!p.shine} onChange={(e) => onChange({ shine: e.target.checked || undefined })} />
               <span>✨ لمعة تمشي (Light sweep)</span>
@@ -705,6 +723,12 @@ function VideoFields({
         <input type="checkbox" checked={p.muted} onChange={(e) => onChange({ muted: e.target.checked })} />
         <span>Mute audio</span>
       </label>
+      {p.src && (
+        <label className="field">
+          <span>⭕ عرض داخل دائرة (0 = بدون، 0.9 = دائرة كبيرة)</span>
+          <NumInput min={0} max={1} step={0.05} value={p.circleMask ?? 0} onChange={(e) => onChange({ circleMask: Math.min(1, Math.max(0, parseFloat(e.target.value) || 0)) || undefined })} />
+        </label>
+      )}
       {p.src && <BackgroundPicker value={p.background} onChange={(background) => onChange({ background })} />}
       {p.src && (
         <div className="properties-subsection">
@@ -985,6 +1009,8 @@ function CaptionFields({
               <option value="buildUp">Build-up (words accumulate as spoken)</option>
               <option value="phraseStack">Phrase stack (pro talking-head)</option>
               <option value="glassPill">Glass pill (phrase in frosted glass)</option>
+              <option value="minimal">Minimal (editorial)</option>
+              <option value="scatter">Scatter (words around the speaker — trend)</option>
             </select>
           </label>
           <FontSelect value={p.fontFamily} onChange={(fontFamily) => onChange({ fontFamily })} />
@@ -1076,6 +1102,48 @@ function GlassFields({ props: p, onChange }: { props: GlassLayerProps; onChange:
       </div>
       <p className="hint">Blurs whatever is already drawn behind it (video, shapes…) — a real frosted-glass look.</p>
       <p className="hint">Rotation isn't supported on glass panels (position, scale and opacity still work).</p>
+    </>
+  );
+}
+
+function DoodleFields({ props: p, onChange }: { props: DoodleLayerProps; onChange: (p: Partial<DoodleLayerProps>) => void }) {
+  return (
+    <>
+      <label className="field">
+        <span>الرسمة</span>
+        <select value={p.kind} onChange={(e) => onChange({ kind: e.target.value as DoodleLayerProps["kind"] })}>
+          <option value="questions">علامات استفهام ؟؟؟</option>
+          <option value="scribbleCircle">دائرة بالقلم حول شي</option>
+          <option value="underline">خط تحت كلمة</option>
+          <option value="sparkle">نجمة لمعة ✦</option>
+          <option value="burst">انفجار خطوط</option>
+          <option value="dots">نقاط متناثرة</option>
+        </select>
+      </label>
+      <div className="field-row">
+        <label className="field">
+          <span>Width</span>
+          <NumInput min={10} value={p.width} onChange={(e) => onChange({ width: Math.max(10, parseFloat(e.target.value) || 10) })} />
+        </label>
+        <label className="field">
+          <span>Height</span>
+          <NumInput min={10} value={p.height} onChange={(e) => onChange({ height: Math.max(10, parseFloat(e.target.value) || 10) })} />
+        </label>
+        <label className="field">
+          <span>Color</span>
+          <input type="color" value={p.color} onChange={(e) => onChange({ color: e.target.value })} />
+        </label>
+      </div>
+      <div className="field-row">
+        <label className="field">
+          <span>Thickness</span>
+          <NumInput min={1} value={p.thickness} onChange={(e) => onChange({ thickness: Math.max(1, parseFloat(e.target.value) || 1) })} />
+        </label>
+        <label className="field">
+          <span>Draw time (s)</span>
+          <NumInput min={0.05} step={0.1} value={p.drawDuration} onChange={(e) => onChange({ drawDuration: Math.max(0.05, parseFloat(e.target.value) || 0.5) })} />
+        </label>
+      </div>
     </>
   );
 }

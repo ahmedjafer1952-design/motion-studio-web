@@ -63,6 +63,33 @@ export const COLOR_GRADES: ColorGradePreset[] = [
     filter: "contrast(1.15) saturate(0.75) brightness(0.65) hue-rotate(-15deg)",
     tint: { color: "#0d1b3a", alpha: 0.22, blend: "multiply" },
   },
+  {
+    id: "duoBlue",
+    label: "أزرق أحادي",
+    description: "الصورة كلها بدرجات الأزرق — ستايل ريلز ترند",
+    filter: "grayscale(1) contrast(1.25) brightness(0.95)",
+    tint: { color: "#1f4fff", alpha: 0.75, blend: "color" },
+  },
+  {
+    id: "duoRed",
+    label: "أحمر أحادي",
+    description: "الصورة كلها بدرجات الأحمر — درامي",
+    filter: "grayscale(1) contrast(1.3) brightness(0.9)",
+    tint: { color: "#e3122c", alpha: 0.7, blend: "color" },
+  },
+  {
+    id: "duoGreen",
+    label: "أخضر أحادي",
+    description: "الصورة كلها بدرجات الأخضر",
+    filter: "grayscale(1) contrast(1.2)",
+    tint: { color: "#19c25a", alpha: 0.65, blend: "color" },
+  },
+  {
+    id: "monoAccent",
+    label: "أبيض وأسود سينمائي",
+    description: "أبيض وأسود ناعم بحبيبات — والكتابة الملوّنة تبرز",
+    filter: "grayscale(1) contrast(1.15) brightness(1.02)",
+  },
 ];
 
 export function getColorGrade(id: ColorGradeId | undefined): ColorGradePreset {

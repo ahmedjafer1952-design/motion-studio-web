@@ -77,7 +77,7 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
   const [includeCta, setIncludeCta] = useState(true);
   const [ctaText, setCtaText] = useState("");
   const [brandColor, setBrandColor] = useState(""); // "" = Claude picks
-  const [style, setStyle] = useState<"editorial" | "bold">("editorial");
+  const [style, setStyle] = useState<"editorial" | "bold" | "trend">("editorial");
   const [textBehind, setTextBehind] = useState(false);
   const [bgLook, setBgLook] = useState<"" | VideoLook | "studio">("");
   const [jumpCuts, setJumpCuts] = useState(true);
@@ -394,10 +394,14 @@ export function AutoEditDialog({ onClose }: { onClose: () => void }) {
               </label>
             )}
 
-            <div className="mode-cards mode-cards-2">
+            <div className="mode-cards">
               <button type="button" className={`mode-card ${style === "editorial" ? "active" : ""}`} onClick={() => setStyle("editorial")}>
                 <span className="mode-card-title">🎬 حديث احترافي</span>
                 <span className="mode-card-desc">ستايل المونتيرين الحاليين: خطوط مرتبة على جنب، هدوء، زوم بطيء، حبيبات فيلم — ما يبين AI</span>
+              </button>
+              <button type="button" className={`mode-card ${style === "trend" ? "active" : ""}`} onClick={() => setStyle("trend")}>
+                <span className="mode-card-title">🔥 ترند ٢٠٢٦</span>
+                <span className="mode-card-desc">كلمة ضخمة فوق الراس تطلع من الضبابية، كلمات متناثرة، رسمات بالقلم، كروت ملوّنة — ستايل الريلز الحالية</span>
               </button>
               <button type="button" className={`mode-card ${style === "bold" ? "active" : ""}`} onClick={() => setStyle("bold")}>
                 <span className="mode-card-title">⚡ جريء ريلز</span>

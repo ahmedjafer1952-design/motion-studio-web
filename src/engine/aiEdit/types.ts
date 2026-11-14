@@ -13,7 +13,7 @@ export interface AiEditRequest {
   /** Brand color chosen by the creator ("" = let Claude pick). */
   brandColor?: string;
   /** "editorial" = restrained modern pro look (default); "bold" = high-energy reels. */
-  style?: "editorial" | "bold";
+  style?: "editorial" | "bold" | "trend";
 }
 
 /** Claude's edit decisions, referencing transcript words by index so timing stays exact. */
